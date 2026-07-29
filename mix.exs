@@ -79,16 +79,10 @@ defmodule IchorRuntime.MixProject do
   end
 
   defp description do
-    "The small runtime support library Ichor-generated parsers (mix ichor.gen, or " <>
-      "use Ichor) call into -- capture dispatch, error formatting, the compiled " <>
-      "Tokenizer/Parser combinators, the LR/GLR shift-reduce/GSS runtime, operator-" <>
-      "precedence parsing (Ichor.Toolkit.Pratt, for @native(...) rules like a " <>
-      "Prolog-style op/3 table), generic term recursion (Ichor.Toolkit.TermWalk), " <>
-      "and unification/backtracking search (Ichor.Backtrack) for a consumer's own " <>
-      "engine built on top of a generated parser. Ichor itself (grammar parsing, " <>
-      "analysis, and codegen) is a dev-time-only dependency; this is the only piece " <>
-      "a generated parser -- or semantic analysis/an engine built on top of one -- " <>
-      "needs at runtime."
+    "The small runtime support library Ichor-generated parsers call into: capture " <>
+      "dispatch, error formatting, compiled Tokenizer/Parser combinators, and the " <>
+      "LR/GLR runtime -- plus standalone Pratt precedence parsing, generic term " <>
+      "recursion, and unification/backtracking search. Ichor itself is dev-only."
   end
 
   defp package do
