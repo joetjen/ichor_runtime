@@ -94,17 +94,17 @@ defmodule IchorRuntime.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/joetjen/ichor"},
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE)
+      links: %{"GitHub" => "https://github.com/joetjen/ichor_runtime"},
+      files: ~w(lib .formatter.exs mix.exs README.md CHEATSHEET.md CHANGELOG.md LICENSE)
     ]
   end
 
   defp docs do
     [
       main: "readme",
-      source_url: "https://github.com/joetjen/ichor",
+      source_url: "https://github.com/joetjen/ichor_runtime",
       source_ref: "v#{@version}",
-      extras: ["README.md"],
+      extras: ["README.md", "CHEATSHEET.md", "CHANGELOG.md", "LICENSE"],
       groups_for_modules: groups_for_modules()
     ]
   end

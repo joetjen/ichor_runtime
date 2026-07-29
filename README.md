@@ -1,27 +1,39 @@
 # IchorRuntime
 
-The small runtime support library [Ichor](https://hex.pm/packages/ichor)-generated
-parsers call into. Every parser `mix ichor.gen` writes to disk, and every
-module `use Ichor, grammar: ..., actions: ...` splices code into, resolves
-a handful of module names at runtime -- `Ichor.Actions`, `Ichor.Error`,
-`Grammar.Native.Runtime.Parser`/`Tokenizer`, `Grammar.VM.Token`, and (for
-`@engine lr`/`glr` grammars) the LR/GLR shift-reduce and GSS runtime. This
-package is exactly that set, and nothing else.
+[![Hex.pm](https://img.shields.io/hexpm/v/ichor_runtime.svg)](https://hex.pm/packages/ichor_runtime)
+[![Documentation](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/ichor_runtime)
 
-Ichor itself -- the Aether grammar language, its ABNF/BNF/EBNF/PEG
-importers, `Grammar.Analysis`, the LR/GLR table builder, and both codegen
-backends -- never runs after a grammar's been compiled. Splitting it out
-this way means a project that only ever runs `mix ichor.gen` ahead of
-time can depend on `ichor_runtime` as an ordinary dependency, and on
-`ichor` itself as `only: :dev, runtime: false` -- the bulk of the
-library (grammar parsing, analysis, and codegen) never ships to
-production.
+The small runtime support library [Ichor](https://hex.pm/packages/ichor)-generated
+parsers call into, plus a handful of standalone toolkit modules useful to
+any engine you build on top of one. Every parser `mix ichor.gen` writes
+to disk, and every module `use Ichor, grammar: ..., actions: ...`
+splices code into, resolves a handful of module names at runtime --
+`Ichor.Actions`, `Ichor.Error`, the compiled Tokenizer/Parser
+combinators, `Grammar.VM.Token`, and (for `@engine lr`/`glr` grammars)
+the LR/GLR shift-reduce and GSS runtime. This package is exactly that
+set, plus `Ichor.Toolkit.Pratt`, `Ichor.Toolkit.TermWalk`, and
+`Ichor.Backtrack` -- three self-contained pieces a generated parser's
+own `@native(...)` callbacks (or an engine built on top of one) commonly
+need at every match/evaluation, not just once at grammar-generation
+time.
+
+[Ichor](https://github.com/joetjen/ichor) itself -- the Aether grammar
+language, its ABNF/BNF/EBNF/PEG importers, `Grammar.Analysis`, the
+LR/GLR table builder, and both codegen backends -- never runs after a
+grammar's been compiled. Splitting it out this way means a project that
+only ever runs `mix ichor.gen` ahead of time can depend on
+`ichor_runtime` as an ordinary dependency, and on `ichor` itself as
+`only: :dev, runtime: false` -- the bulk of the library (grammar
+parsing, analysis, and codegen) genuinely never ships to production,
+including in a `mix release` build.
+
+## Installation
 
 ```elixir
 def deps do
   [
-    {:ichor_runtime, path: "packages/ichor_runtime"},
-    {:ichor, only: :dev, runtime: false}
+    {:ichor_runtime, "~> 0.1.0"},
+    {:ichor, "~> 0.2.0", only: :dev, runtime: false}
   ]
 end
 ```
@@ -30,6 +42,65 @@ A project that instead loads/compiles grammars at runtime (via
 `Grammar.VM`, `Grammar.LR`, or `Grammar.GLR`, rather than pregenerated
 code) still needs the full `ichor` package as a normal dependency --
 `ichor_runtime` is a piece Ichor's own interpreted backends depend on
-too, not a replacement for it.
+too, not a replacement for it. In that case, just depend on `ichor`;
+`ichor_runtime` comes along transitively.
 
-See the main [Ichor README](../../README.md) for the full picture.
+## What's in here
+
+- **Capture dispatch** (`Ichor.Actions`, `Ichor.Capture`, `Ichor.Node`,
+  `Ichor.Error`) -- the mechanism a generated `run/1,2` uses to turn a
+  raw parse into your `Ichor.Actions` module's actual result. You
+  implement an `Ichor.Actions` behaviour; this is what calls it. Also
+  where `Ichor.Actions.evaluate_node/3` lives -- the re-entry point a
+  grammar with macro-like features (LISP's own `defmacro`, most
+  notably) needs to evaluate a capture tree that didn't come from the
+  original parse (a macro's own expansion).
+- **The compiled Tokenizer/Parser runtime**
+  (`Grammar.Native.Runtime.Parser`/`Tokenizer`, `Grammar.VM.Token`,
+  `Grammar.Source`, `Grammar.Lexer`) -- the shared combinators every
+  `mix ichor.gen`-generated module's own tokenizer/parser functions call
+  into. Not meant to be called directly; generated code is the only
+  caller.
+- **The LR/GLR runtime** (`Grammar.LRTable`, `Grammar.LRTable.Production`/
+  `.Captures`, `Grammar.LR.Stack`, `Grammar.GLR.GSS`/`.Runtime`) -- same
+  idea, for a grammar tagged `@engine lr`/`@engine glr`: the shift-reduce
+  stack and graph-structured-stack machinery a compiled LR/GLR parser's
+  generated dispatch functions call into. Also not meant to be called
+  directly.
+- **`Ichor.CustomLexeme`/`Ichor.CustomRule`** -- the behaviours a
+  grammar's own `@native("Module", "function", ...)` escape hatch
+  dispatches to. You implement these; nothing here calls them for you.
+- **`Ichor.Toolkit.Pratt`** -- precedence-climbing (Pratt) expression
+  parsing over a runtime-mutable operator table (prefix/infix/postfix).
+  Genuinely standalone -- useful for any expression grammar with
+  operator precedence, whether or not it was ever generated by Ichor.
+- **`Ichor.Toolkit.TermWalk`** -- generic `fold`/`rewrite` recursion over
+  any term type implementing `Ichor.Backtrack.Term`. Standalone.
+- **`Ichor.Backtrack`** (+ `.Bindings`/`.Term`/`.Tree`) -- a generic
+  lazy-search-plus-unification substrate for logic-language evaluation
+  models (SLD-resolution and friends). Standalone -- nothing else in
+  this package calls it.
+- **`Ichor.Toolkit.Result`** -- `reduce_ok`/`map_ok`, an
+  `Enum.reduce`-with-early-exit-on-failure pair. Standalone, tiny,
+  useful anywhere you're threading a fallible step over a collection.
+
+See the [cheatsheet](CHEATSHEET.md) for worked examples of every
+standalone piece (`Pratt`, `TermWalk`, `Backtrack`, `Result`), and for
+what an `Ichor.Actions` module actually receives at runtime. For the
+grammar-authoring side of things -- writing `.aether` grammars,
+`mix ichor.gen`, `use Ichor` -- see
+[Ichor's own docs](https://hexdocs.pm/ichor).
+
+## Development
+
+```sh
+mix deps.get
+mix precommit
+```
+
+`mix precommit` chains `format` -> `compile --warnings-as-errors` ->
+`credo --strict` -> `sobelow` -> `test` -> `dialyzer`.
+
+## License
+
+MIT -- see [LICENSE](LICENSE).
