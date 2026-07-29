@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-29
+
 ### Added
 
 - First release, extracted from [`ichor`](https://github.com/joetjen/ichor)'s
@@ -32,3 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `.Tree`, a lazy-search-plus-unification substrate for
     logic-language evaluation models), `Ichor.Toolkit.Result`
     (`reduce_ok`/`map_ok`).
+
+[Unreleased]: https://github.com/joetjen/ichor_runtime/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/joetjen/ichor_runtime/releases/tag/v0.1.0
