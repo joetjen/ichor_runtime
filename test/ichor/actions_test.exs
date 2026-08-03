@@ -13,7 +13,7 @@ defmodule Ichor.ActionsTest do
     end
 
     test "a raw rule node dispatches to handle_rule (or the default fallback)" do
-      raw = {:rule, :pair, %{key: {:token, :WORD, "a"}, value: {:token, :NUMBER, "1"}}}
+      raw = {:rule, :pair, [key: {:token, :WORD, "a"}, value: {:token, :NUMBER, "1"}]}
 
       assert {:ok, %Ichor.Node{rule: :pair, captures: %{key: "a", value: "1"}}, :ctx} =
                Ichor.Actions.evaluate_node(raw, Support.NoActions, :ctx)

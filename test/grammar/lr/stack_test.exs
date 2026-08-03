@@ -35,11 +35,11 @@ defmodule Grammar.LR.StackTest do
     assert exposed_state == 0
     assert rest_stack == [{0, 0, 0, nil}]
     assert {start_pos, end_pos} == {0, 3}
-    assert captures == %{n: [{:token, :NUM, "1"}, {:token, :NUM, "2"}]}
+    assert captures == [n: [{:token, :NUM, "1"}, {:token, :NUM, "2"}]]
   end
 
   test "push_reduced/5 lands a reduced nonterminal's captures on top, tagged with its target state" do
-    stack = Stack.push_reduced([], 7, 0, 3, %{n: "1"})
-    assert [{7, 0, 3, %{n: "1"}}] = stack
+    stack = Stack.push_reduced([], 7, 0, 3, n: "1")
+    assert [{7, 0, 3, [n: "1"]}] = stack
   end
 end

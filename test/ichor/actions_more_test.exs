@@ -52,6 +52,7 @@ end
 
 defmodule Ichor.ActionsMoreTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
   alias Ichor.ActionsMoreTest.{
     CountingActions,
@@ -66,7 +67,7 @@ defmodule Ichor.ActionsMoreTest do
 
   describe "evaluate/5" do
     test "dispatches the root rule and returns the final context alongside the value" do
-      raw = rule(:item, %{WORD: token(:WORD, "hi")})
+      raw = rule(:item, WORD: token(:WORD, "hi"))
 
       assert Ichor.Actions.evaluate(:item, elem(raw, 2), CountingActions, 0) ==
                {:ok, {"hi", 0}, 1}
@@ -74,16 +75,16 @@ defmodule Ichor.ActionsMoreTest do
 
     test "threads context across sibling captures in order" do
       list =
-        rule(:list, %{
-          item: [rule(:item, %{WORD: token(:WORD, "a")}), rule(:item, %{WORD: token(:WORD, "b")})]
-        })
+        rule(:list,
+          item: [rule(:item, WORD: token(:WORD, "a")), rule(:item, WORD: token(:WORD, "b"))]
+        )
 
       assert {:ok, %{item: [{"a", 0}, {"b", 1}]}, 2} =
                Ichor.Actions.evaluate(:list, elem(list, 2), CountingActions, 0)
     end
 
     test "runs finalize/1 over the final context when the actions module implements it" do
-      raw = rule(:whatever, %{})
+      raw = rule(:whatever, [])
 
       assert {:error, [error]} =
                Ichor.Actions.evaluate(:whatever, elem(raw, 2), FinalizingActions, nil)
@@ -92,14 +93,14 @@ defmodule Ichor.ActionsMoreTest do
     end
 
     test "skips finalize entirely when the actions module doesn't implement it" do
-      raw = rule(:item, %{WORD: token(:WORD, "hi")})
+      raw = rule(:item, WORD: token(:WORD, "hi"))
 
       assert Ichor.Actions.evaluate(:item, elem(raw, 2), CountingActions, 0) ==
                {:ok, {"hi", 0}, 1}
     end
 
     test "a rejected token propagates all the way out as the overall result" do
-      raw = rule(:whatever, %{n: token(:DIGITS, "123")})
+      raw = rule(:whatever, n: token(:DIGITS, "123"))
 
       assert {:error, error} =
                Ichor.Actions.evaluate(:whatever, elem(raw, 2), RejectingActions, nil)
@@ -111,7 +112,7 @@ defmodule Ichor.ActionsMoreTest do
       # The raw tree has no :op key at all (it matched zero times under
       # a `*`) -- capture_shapes says :op is repeatable for :expr, so
       # the built captures map must show %{op: []}, not a missing key.
-      raw_captures = %{n: token(:NUMBER, "1")}
+      raw_captures = [n: token(:NUMBER, "1")]
       shapes = %{expr: MapSet.new([:op])}
 
       assert {:ok, %Ichor.Node{captures: %{op: [], n: "1"}}, nil} =
@@ -121,7 +122,7 @@ defmodule Ichor.ActionsMoreTest do
 
   describe "dispatch_rule/5 fallback behavior" do
     test "falls back to the default for a rule the actions module doesn't implement a clause for" do
-      raw_captures = %{WORD: token(:WORD, "fallback")}
+      raw_captures = [WORD: token(:WORD, "fallback")]
 
       assert Ichor.Actions.dispatch_rule(
                PassthroughFallbackActions,
@@ -133,7 +134,7 @@ defmodule Ichor.ActionsMoreTest do
     end
 
     test "uses the real clause when one matches" do
-      raw_captures = %{WORD: token(:WORD, "handled")}
+      raw_captures = [WORD: token(:WORD, "handled")]
 
       assert Ichor.Actions.dispatch_rule(
                PassthroughFallbackActions,
@@ -146,7 +147,7 @@ defmodule Ichor.ActionsMoreTest do
 
     test "does NOT swallow a FunctionClauseError raised from inside a matched clause's own body" do
       assert_raise FunctionClauseError, fn ->
-        Ichor.Actions.dispatch_rule(InternalCrashActions, :boom, %{}, "not an atom", %{})
+        Ichor.Actions.dispatch_rule(InternalCrashActions, :boom, [], "not an atom", %{})
       end
     end
   end
@@ -162,53 +163,99 @@ defmodule Ichor.ActionsMoreTest do
   end
 
   describe "eval_all/2" do
-    test "evaluates every capture, threading context in order" do
+    test "evaluates every capture in position order, threading context" do
+      # b's position (1) comes after a's (0) -- if eval_all instead
+      # trusted the map's own (unspecified) iteration order, swapping
+      # these two keys around wouldn't change anything either, which is
+      # exactly why this asserts a directional effect (string prefix
+      # order), not just the final values.
       captures = %{
-        a: %Ichor.Capture{node: {:text, "a"}, eval: fn ctx -> {:ok, "A", ctx + 1} end},
-        b: %Ichor.Capture{node: {:text, "b"}, eval: fn ctx -> {:ok, "B", ctx + 1} end}
+        a: %Ichor.Capture{
+          node: {:text, "a"},
+          position: 0,
+          eval: fn ctx -> {:ok, "A", ctx <> "a"} end
+        },
+        b: %Ichor.Capture{
+          node: {:text, "b"},
+          position: 1,
+          eval: fn ctx -> {:ok, "B", ctx <> "b"} end
+        }
       }
 
-      assert Ichor.Actions.eval_all(captures, 0) == {:ok, %{a: "A", b: "B"}, 2}
+      assert Ichor.Actions.eval_all(captures, "") == {:ok, %{a: "A", b: "B"}, "ab"}
     end
 
     test "a list-valued capture evaluates to a list of values, in order" do
       captures = %{
         item: [
-          %Ichor.Capture{node: {:text, "1"}, eval: fn ctx -> {:ok, 1, ctx} end},
-          %Ichor.Capture{node: {:text, "2"}, eval: fn ctx -> {:ok, 2, ctx} end}
+          %Ichor.Capture{node: {:text, "1"}, position: 0, eval: fn ctx -> {:ok, 1, ctx} end},
+          %Ichor.Capture{node: {:text, "2"}, position: 0, eval: fn ctx -> {:ok, 2, ctx} end}
         ]
       }
 
       assert Ichor.Actions.eval_all(captures, nil) == {:ok, %{item: [1, 2]}, nil}
     end
 
-    test "halts and returns immediately on the first error" do
+    test "halts and returns immediately on the first error, per each capture's own position" do
       captures = %{
-        a: %Ichor.Capture{node: {:text, "a"}, eval: fn _ctx -> {:error, :boom} end},
-        never: %Ichor.Capture{node: {:text, "x"}, eval: fn _ctx -> raise "should never run" end}
+        a: %Ichor.Capture{node: {:text, "a"}, position: 0, eval: fn _ctx -> {:error, :boom} end},
+        never: %Ichor.Capture{
+          node: {:text, "x"},
+          position: 1,
+          eval: fn _ctx -> raise "should never run" end
+        }
       }
 
       assert Ichor.Actions.eval_all(captures, nil) == {:error, :boom}
+    end
+
+    property "evaluation order always follows position, never the captures map's own key order" do
+      check all(names <- uniq_list_of(atom(:alphanumeric), min_length: 1, max_length: 8)) do
+        positions = Enum.shuffle(0..(length(names) - 1))
+
+        captures =
+          [names, positions]
+          |> Enum.zip()
+          |> Map.new(fn {name, position} ->
+            {name,
+             %Ichor.Capture{
+               node: {:text, Atom.to_string(name)},
+               position: position,
+               eval: fn seen -> {:ok, name, [{position, name} | seen]} end
+             }}
+          end)
+
+        assert {:ok, _values, seen} = Ichor.Actions.eval_all(captures, [])
+
+        expected =
+          names
+          |> Enum.zip(positions)
+          |> Enum.sort_by(fn {_name, position} -> position end)
+          |> Enum.map(fn {name, position} -> {position, name} end)
+          |> Enum.reverse()
+
+        assert seen == expected
+      end
     end
   end
 
   describe "default fallback shape" do
     test "exactly one meaningful capture passes its value straight through, unwrapped" do
-      raw_captures = %{n: token(:NUMBER, "42")}
+      raw_captures = [n: token(:NUMBER, "42")]
 
       assert Ichor.Actions.dispatch_rule(Support.NoActions, :factor, raw_captures, nil, %{}) ==
                {:ok, "42", nil}
     end
 
     test "more than one capture builds an Ichor.Node" do
-      raw_captures = %{a: token(:A, "x"), b: token(:B, "y")}
+      raw_captures = [a: token(:A, "x"), b: token(:B, "y")]
 
       assert {:ok, %Ichor.Node{rule: :pair, captures: %{a: "x", b: "y"}}, nil} =
                Ichor.Actions.dispatch_rule(Support.NoActions, :pair, raw_captures, nil, %{})
     end
 
     test "a single capture that's a list (repeated once) still builds a node, not a passthrough" do
-      raw_captures = %{item: [token(:A, "x")]}
+      raw_captures = [item: [token(:A, "x")]]
 
       assert {:ok, %Ichor.Node{rule: :list, captures: %{item: ["x"]}}, nil} =
                Ichor.Actions.dispatch_rule(Support.NoActions, :list, raw_captures, nil, %{})

@@ -42,13 +42,17 @@ end
   key.
 - Each capture is an `%Ichor.Capture{}`: `.node` is the raw, unevaluated
   parse (`Ichor.Capture.node_t()` -- `{:token, name, text}` /
-  `{:rule, name, sub_captures}` / `{:text, text}`); `.eval.(ctx)`
-  evaluates it and returns `{:ok, value, new_ctx}`. Call `.eval` only
-  when you actually want the value -- this is what lets an `if`/`quote`-
-  style special form skip evaluating a branch entirely.
+  `{:rule, name, sub_captures}` / `{:text, text}`, where `sub_captures`
+  is an `Ichor.Capture.raw_captures()` -- `[{name, value_or_values}]`,
+  an ordered list, *not* a map, so a nested rule's own capture order
+  survives); `.eval.(ctx)` evaluates it and returns
+  `{:ok, value, new_ctx}`. Call `.eval` only when you actually want the
+  value -- this is what lets an `if`/`quote`-style special form skip
+  evaluating a branch entirely.
 - `Ichor.Actions.evaluate_node/3` re-enters this same dispatch for a
   capture node that didn't come from the original parse -- a macro's own
-  expansion, most notably (LISP's `defmacro`): `Ichor.Actions.evaluate_node({:rule, :form, captures}, MyLang.Actions, ctx)`.
+  expansion, most notably (LISP's `defmacro`):
+  `Ichor.Actions.evaluate_node({:rule, :form, [op: {:token, :PLUS, "+"}]}, MyLang.Actions, ctx)`.
 - Errors are `%Ichor.Error{}` (`Ichor.Error.new/1`, `Ichor.Error.format/1`)
   -- the same struct every stage (lexer, parser, your own actions) uses,
   so error output looks consistent regardless of where it came from.
