@@ -5,7 +5,7 @@ defmodule Grammar.GLR.GSS do
   state at the same position share one node, the actual efficiency win
   over independent parallel stacks), edges labeled with whatever that
   edge's own transition produced (a shifted `%Grammar.VM.Token{}`, or a
-  reduced nonterminal's own already-built captures map) plus the
+  reduced nonterminal's own already-built raw-captures list) plus the
   provenance accumulated along it so far.
 
   A node can have more than one incoming edge exactly when two

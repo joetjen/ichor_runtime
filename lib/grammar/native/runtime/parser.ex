@@ -9,19 +9,25 @@ defmodule Grammar.Native.Runtime.Parser do
   same combinators this module implements.
 
   Every combinator here operates on a `{:ok, pos, ref_stack, captures} |
-  :fail` shape, where `captures` is a raw capture map in exactly the
-  shape `Ichor.Actions` already expects (`{:token, name, text}` /
-  `{:rule, name, sub_captures}` / `{:text, text}`) -- generated code
-  builds this map compositionally as it goes, rather than through a
-  single mutable per-rule frame the way `Grammar.VM.TokenInterpreter`
-  does, since plain Elixir recursion already gives every failed
-  alternative's partial captures nowhere to leak to (they're just a
-  discarded return value, never mutated shared state).
+  :fail` shape, where `captures` is a raw-captures list in exactly the
+  shape `Ichor.Actions` already expects (`Ichor.Capture.raw_captures/0`:
+  `{:token, name, text}` / `{:rule, name, sub_captures}` / `{:text,
+  text}` values, keyed by name, in first-occurrence RHS order) --
+  generated code builds this list compositionally as it goes, rather
+  than through a single mutable per-rule frame the way
+  `Grammar.VM.TokenInterpreter` does, since plain Elixir recursion
+  already gives every failed alternative's partial captures nowhere to
+  leak to (they're just a discarded return value, never mutated shared
+  state). A list, not a map: list order is the one thing Elixir
+  actually guarantees, which is exactly what lets `Ichor.Actions.eval_all/2`
+  evaluate sibling captures in true source order instead of trusting a
+  plain map's own (cross-OTP-version-unstable) iteration order.
   """
 
   alias Grammar.VM.Token
+  alias Ichor.Capture
 
-  @type captures :: %{optional(atom()) => term()}
+  @type captures :: Capture.raw_captures()
   @type rule_result :: {:ok, non_neg_integer(), [integer()], captures()} | :fail
   @type rule_fun :: (tuple(), non_neg_integer(), [integer()], term() -> rule_result())
 
@@ -29,13 +35,15 @@ defmodule Grammar.Native.Runtime.Parser do
   # merge_capture/3) ----
 
   @doc """
-  Folds every key of `new` into `acc`, list-appending (or list-wrapping)
-  on repeat capture names -- the same rule a rule's own capture frame
-  follows in the VM (`Grammar.VM.TokenInterpreter`'s own private
-  `merge_capture` helper).
+  Folds every entry of `new` into `acc`, list-appending (or
+  list-wrapping) on repeat capture names -- the same rule a rule's own
+  capture frame follows in the VM (`Grammar.VM.TokenInterpreter`'s own
+  private `merge_capture` helper). A new name is appended at the end of
+  `acc` (landing at its first-occurrence position); a repeat name
+  updates its existing entry in place, not moving it.
 
   Unlike that VM function, this one has to merge whole *subtree*
-  capture maps at once (a `Seq`/`Star` node's already-accumulated
+  capture lists at once (a `Seq`/`Star` node's already-accumulated
   captures), not a single new occurrence at a time -- so a value that's
   already a list (built up by a nested `Star`/`Plus`/`Rep` sharing this
   same capture name) has to be flattened into the result rather than
@@ -52,9 +60,9 @@ defmodule Grammar.Native.Runtime.Parser do
   end
 
   defp merge_one(acc, k, v) do
-    case Map.fetch(acc, k) do
-      :error -> Map.put(acc, k, v)
-      {:ok, existing} -> Map.put(acc, k, as_list(existing) ++ as_list(v))
+    case List.keyfind(acc, k, 0) do
+      nil -> acc ++ [{k, v}]
+      {^k, existing} -> List.keyreplace(acc, k, 0, {k, as_list(existing) ++ as_list(v)})
     end
   end
 
@@ -81,7 +89,7 @@ defmodule Grammar.Native.Runtime.Parser do
   """
   @spec star(rule_fun(), tuple(), non_neg_integer(), [integer()], term(), captures()) ::
           rule_result()
-  def star(fun, stream, pos, ref_stack, context, acc \\ %{}) do
+  def star(fun, stream, pos, ref_stack, context, acc \\ []) do
     case fun.(stream, pos, ref_stack, context) do
       :fail ->
         {:ok, pos, ref_stack, acc}
@@ -114,7 +122,7 @@ defmodule Grammar.Native.Runtime.Parser do
   def opt(fun, stream, pos, ref_stack, context) do
     case fun.(stream, pos, ref_stack, context) do
       {:ok, _, _, _} = ok -> ok
-      :fail -> {:ok, pos, ref_stack, %{}}
+      :fail -> {:ok, pos, ref_stack, []}
     end
   end
 
@@ -128,7 +136,7 @@ defmodule Grammar.Native.Runtime.Parser do
           term()
         ) ::
           rule_result()
-  def call_n_times(_fun, 0, _stream, pos, ref_stack, _context), do: {:ok, pos, ref_stack, %{}}
+  def call_n_times(_fun, 0, _stream, pos, ref_stack, _context), do: {:ok, pos, ref_stack, []}
 
   def call_n_times(fun, n, stream, pos, ref_stack, context) do
     with {:ok, pos1, ref1, caps1} <- fun.(stream, pos, ref_stack, context),
@@ -189,7 +197,7 @@ defmodule Grammar.Native.Runtime.Parser do
   @spec and_pred(rule_fun(), tuple(), non_neg_integer(), [integer()], term()) :: rule_result()
   def and_pred(fun, stream, pos, ref_stack, context) do
     case fun.(stream, pos, ref_stack, context) do
-      {:ok, _, _, _} -> {:ok, pos, ref_stack, %{}}
+      {:ok, _, _, _} -> {:ok, pos, ref_stack, []}
       :fail -> :fail
     end
   end
@@ -199,7 +207,7 @@ defmodule Grammar.Native.Runtime.Parser do
   def not_pred(fun, stream, pos, ref_stack, context) do
     case fun.(stream, pos, ref_stack, context) do
       {:ok, _, _, _} -> :fail
-      :fail -> {:ok, pos, ref_stack, %{}}
+      :fail -> {:ok, pos, ref_stack, []}
     end
   end
 

@@ -8,9 +8,12 @@ defmodule Ichor.Actions do
   to the defaults below.
 
   `handle_rule`/`handle_token` are never invoked directly by user code --
-  `Grammar.VM` builds the raw capture tree during matching, and this
-  module's `evaluate/5` walks it, calling into the actions module (or the
-  default fallback) as it goes, threading `context` throughout.
+  `Grammar.VM` builds the raw capture tree during matching (an
+  `Ichor.Capture.raw_captures/0` list, in true source order at every
+  level -- never a plain map, which Elixir/Erlang make no cross-version
+  iteration-order guarantee about), and this module's `evaluate/5` walks
+  it, calling into the actions module (or the default fallback) as it
+  goes, threading `context` throughout.
 
   `evaluate_node/3` is the companion entry point for a raw capture node
   that *didn't* come from the original parse -- a grammar with
@@ -43,18 +46,31 @@ defmodule Ichor.Actions do
   @optional_callbacks handle_rule: 3, handle_token: 3, finalize: 1
 
   @doc """
-  Eagerly invokes every capture's `eval`, in order, threading `context`
-  through -- the plain bottom-up fold that's correct for grammars with no
-  special-form semantics (most config/markup/query grammars, as opposed
-  to something like LISP's `if`/`quote`, which need to *not* evaluate an
-  untaken branch at all). A list-valued capture (the same name captured
-  more than once, e.g. inside a `*`) resolves to a list of values in the
-  same order. Halts and returns immediately on the first error.
+  Eagerly invokes every capture's `eval`, in true source order (each
+  `%Capture{}`'s own `position`, not `captures`' incidental map
+  iteration order -- see `Ichor.Capture`'s moduledoc for why those two
+  can differ), threading `context` through -- the plain bottom-up fold
+  that's correct for grammars with no special-form semantics (most
+  config/markup/query grammars, as opposed to something like LISP's
+  `if`/`quote`, which need to *not* evaluate an untaken branch at all).
+  A list-valued capture (the same name captured more than once, e.g.
+  inside a `*`) resolves to a list of values in the same order. Halts
+  and returns immediately on the first error.
+
+  A `%Capture{}` built by hand rather than via `dispatch_rule/5`
+  (directly constructing this map for a test, say) defaults every
+  `position` to `0` -- ties between those fall back to whatever order
+  `captures` itself happens to enumerate in, same as this function's
+  behavior before `position` existed. Give hand-built captures distinct
+  `position`s if you need this function's ordering guarantee to hold
+  for them too.
   """
   @spec eval_all(captures(), context()) ::
           {:ok, %{optional(atom()) => term()}, context()} | {:error, Error.t()}
   def eval_all(captures, context) do
-    case Result.reduce_ok(captures, {%{}, context}, fn {name, cap_or_list}, {acc, ctx} ->
+    ordered = Enum.sort_by(captures, fn {_name, cap_or_list} -> position_of(cap_or_list) end)
+
+    case Result.reduce_ok(ordered, {%{}, context}, fn {name, cap_or_list}, {acc, ctx} ->
            case eval_one(cap_or_list, ctx) do
              {:ok, value, ctx} -> {:ok, {Map.put(acc, name, value), ctx}}
              {:error, _} = err -> err
@@ -64,6 +80,10 @@ defmodule Ichor.Actions do
       {:error, _} = err -> err
     end
   end
+
+  defp position_of(%Capture{position: position}), do: position
+  defp position_of([%Capture{position: position} | _]), do: position
+  defp position_of([]), do: 0
 
   defp eval_one(caps, ctx) when is_list(caps) do
     Result.map_ok(caps, ctx, fn cap, ctx -> cap.eval.(ctx) end)
@@ -87,7 +107,7 @@ defmodule Ichor.Actions do
   `:op`" (see that function's docs for why this can't just be inferred
   from the raw tree at dispatch time).
   """
-  @spec evaluate(atom(), map(), module(), context(), capture_shapes()) ::
+  @spec evaluate(atom(), Capture.raw_captures(), module(), context(), capture_shapes()) ::
           {:ok, term(), context()} | {:error, Error.t() | [Error.t()]}
   def evaluate(root_rule, raw_captures, actions_module, initial_context, capture_shapes \\ %{}) do
     # `function_exported?/3` only answers correctly for a module that has
@@ -191,10 +211,24 @@ defmodule Ichor.Actions do
       end
   end
 
+  # A repeatable name (per `capture_shapes`) that DID occur gets its
+  # value wrapped in place, keeping its original position; one that
+  # never occurred at all has no position to keep, so it's appended at
+  # the end as `[]` (see `evaluate/5`'s own moduledoc for why this has
+  # to happen at all: a repeatable capture that matched zero times must
+  # still show up as `[]`, not a missing key).
   defp normalize_repeatables(raw_captures, repeatable_names) do
-    Enum.reduce(repeatable_names, raw_captures, fn name, acc ->
-      Map.update(acc, name, [], &List.wrap/1)
-    end)
+    {normalized, seen} =
+      Enum.map_reduce(raw_captures, MapSet.new(), fn {name, value}, seen ->
+        if MapSet.member?(repeatable_names, name) do
+          {{name, List.wrap(value)}, MapSet.put(seen, name)}
+        else
+          {{name, value}, seen}
+        end
+      end)
+
+    missing = MapSet.difference(repeatable_names, seen)
+    normalized ++ Enum.map(missing, &{&1, []})
   end
 
   # Exactly one capture, captured only once (not via repetition): pass its
@@ -218,18 +252,21 @@ defmodule Ichor.Actions do
   end
 
   defp build_captures(actions_module, raw_captures, capture_shapes) do
-    Map.new(raw_captures, fn {name, raw} ->
-      {name, build_capture(actions_module, raw, capture_shapes)}
+    raw_captures
+    |> Enum.with_index()
+    |> Map.new(fn {{name, raw}, position} ->
+      {name, build_capture(actions_module, raw, capture_shapes, position)}
     end)
   end
 
-  defp build_capture(actions_module, raw, capture_shapes) when is_list(raw) do
-    Enum.map(raw, &build_capture(actions_module, &1, capture_shapes))
+  defp build_capture(actions_module, raw, capture_shapes, position) when is_list(raw) do
+    Enum.map(raw, &build_capture(actions_module, &1, capture_shapes, position))
   end
 
-  defp build_capture(actions_module, {:token, name, text} = node, _capture_shapes) do
+  defp build_capture(actions_module, {:token, name, text} = node, _capture_shapes, position) do
     %Capture{
       node: node,
+      position: position,
       eval: fn ctx ->
         with {:ok, value} <- dispatch_token(actions_module, name, text, ctx) do
           {:ok, value, ctx}
@@ -238,16 +275,22 @@ defmodule Ichor.Actions do
     }
   end
 
-  defp build_capture(actions_module, {:rule, name, raw_sub_captures} = node, capture_shapes) do
+  defp build_capture(
+         actions_module,
+         {:rule, name, raw_sub_captures} = node,
+         capture_shapes,
+         position
+       ) do
     %Capture{
       node: node,
+      position: position,
       eval: fn ctx ->
         dispatch_rule(actions_module, name, raw_sub_captures, ctx, capture_shapes)
       end
     }
   end
 
-  defp build_capture(_actions_module, {:text, text} = node, _capture_shapes) do
-    %Capture{node: node, eval: fn ctx -> {:ok, text, ctx} end}
+  defp build_capture(_actions_module, {:text, text} = node, _capture_shapes, position) do
+    %Capture{node: node, position: position, eval: fn ctx -> {:ok, text, ctx} end}
   end
 end
