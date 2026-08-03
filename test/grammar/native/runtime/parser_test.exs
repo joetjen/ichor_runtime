@@ -14,7 +14,7 @@ defmodule Grammar.Native.Runtime.ParserTest do
     fn stream, pos, ref_stack, _context ->
       case Parser.token_at(stream, pos) do
         %Token{name: ^name} = t ->
-          {:ok, pos + 1, ref_stack, %{cap_name => {:token, name, t.text}}}
+          {:ok, pos + 1, ref_stack, [{cap_name, {:token, name, t.text}}]}
 
         _ ->
           :fail
@@ -26,21 +26,21 @@ defmodule Grammar.Native.Runtime.ParserTest do
 
   describe "merge_captures/2" do
     test "a new key is added as-is" do
-      assert Parser.merge_captures(%{}, %{a: 1}) == %{a: 1}
+      assert Parser.merge_captures([], a: 1) == [a: 1]
     end
 
     test "two scalar occurrences of the same key become a list" do
-      assert Parser.merge_captures(%{a: 1}, %{a: 2}) == %{a: [1, 2]}
+      assert Parser.merge_captures([a: 1], a: 2) == [a: [1, 2]]
     end
 
     test "merging a list-valued key against a scalar flattens, not nests" do
-      assert Parser.merge_captures(%{a: [1, 2]}, %{a: 3}) == %{a: [1, 2, 3]}
-      assert Parser.merge_captures(%{a: 1}, %{a: [2, 3]}) == %{a: [1, 2, 3]}
-      assert Parser.merge_captures(%{a: [1, 2]}, %{a: [3, 4]}) == %{a: [1, 2, 3, 4]}
+      assert Parser.merge_captures([a: [1, 2]], a: 3) == [a: [1, 2, 3]]
+      assert Parser.merge_captures([a: 1], a: [2, 3]) == [a: [1, 2, 3]]
+      assert Parser.merge_captures([a: [1, 2]], a: [3, 4]) == [a: [1, 2, 3, 4]]
     end
 
-    test "unrelated keys from both maps survive independently" do
-      assert Parser.merge_captures(%{a: 1}, %{b: 2}) == %{a: 1, b: 2}
+    test "unrelated keys from both lists survive independently, in append order" do
+      assert Parser.merge_captures([a: 1], b: 2) == [a: 1, b: 2]
     end
   end
 
@@ -53,14 +53,14 @@ defmodule Grammar.Native.Runtime.ParserTest do
       stream = {tok(:A, "a")}
       poison = fn _s, _p, _r, _c -> raise "should never be called" end
 
-      assert {:ok, 1, [0], %{x: {:token, :A, "a"}}} =
+      assert {:ok, 1, [0], [x: {:token, :A, "a"}]} =
                Parser.try_alts([match(:A, :x), poison], stream, 0, [0], nil)
     end
 
     test "falls through to a later alternative when an earlier one fails" do
       stream = {tok(:B, "b")}
 
-      assert {:ok, 1, [0], %{x: {:token, :B, "b"}}} =
+      assert {:ok, 1, [0], [x: {:token, :B, "b"}]} =
                Parser.try_alts([match(:A, :x), match(:B, :x)], stream, 0, [0], nil)
     end
 
@@ -73,27 +73,27 @@ defmodule Grammar.Native.Runtime.ParserTest do
   describe "star/6" do
     test "zero matches: a zero-width success, no captures" do
       stream = {}
-      assert Parser.star(always_fail(), stream, 0, [0], nil) == {:ok, 0, [0], %{}}
+      assert Parser.star(always_fail(), stream, 0, [0], nil) == {:ok, 0, [0], []}
     end
 
     test "greedily consumes every match, merging captures into a list" do
       stream = {tok(:A, "1"), tok(:A, "2"), tok(:B, "stop")}
 
-      assert {:ok, 2, [0], %{x: [{:token, :A, "1"}, {:token, :A, "2"}]}} =
+      assert {:ok, 2, [0], [x: [{:token, :A, "1"}, {:token, :A, "2"}]]} =
                Parser.star(match(:A, :x), stream, 0, [0], nil)
     end
 
     test "a zero-width match is incorporated once, then the loop stops (no infinite loop)" do
       zero_width = fn stream, pos, ref_stack, _context ->
         case Parser.token_at(stream, pos) do
-          %Token{name: :A} -> {:ok, pos, ref_stack, %{seen: true}}
+          %Token{name: :A} -> {:ok, pos, ref_stack, [seen: true]}
           _ -> :fail
         end
       end
 
       stream = {tok(:A, "a")}
 
-      assert {:ok, 0, [0], %{seen: true}} = Parser.star(zero_width, stream, 0, [0], nil)
+      assert {:ok, 0, [0], [seen: true]} = Parser.star(zero_width, stream, 0, [0], nil)
     end
   end
 
@@ -105,7 +105,7 @@ defmodule Grammar.Native.Runtime.ParserTest do
     test "one mandatory match, then star/6 for the rest" do
       stream = {tok(:A, "1"), tok(:A, "2")}
 
-      assert {:ok, 2, [0], %{x: [{:token, :A, "1"}, {:token, :A, "2"}]}} =
+      assert {:ok, 2, [0], [x: [{:token, :A, "1"}, {:token, :A, "2"}]]} =
                Parser.plus(match(:A, :x), stream, 0, [0], nil)
     end
   end
@@ -114,24 +114,24 @@ defmodule Grammar.Native.Runtime.ParserTest do
     test "passes through a real match unchanged" do
       stream = {tok(:A, "a")}
 
-      assert {:ok, 1, [0], %{x: {:token, :A, "a"}}} =
+      assert {:ok, 1, [0], [x: {:token, :A, "a"}]} =
                Parser.opt(match(:A, :x), stream, 0, [0], nil)
     end
 
     test "on failure: zero-width success, no captures" do
-      assert Parser.opt(always_fail(), {tok(:B, "b")}, 0, [0], nil) == {:ok, 0, [0], %{}}
+      assert Parser.opt(always_fail(), {tok(:B, "b")}, 0, [0], nil) == {:ok, 0, [0], []}
     end
   end
 
   describe "call_n_times/6" do
     test "n = 0 succeeds immediately, no captures, fun never called" do
-      assert Parser.call_n_times(always_fail(), 0, {}, 0, [0], nil) == {:ok, 0, [0], %{}}
+      assert Parser.call_n_times(always_fail(), 0, {}, 0, [0], nil) == {:ok, 0, [0], []}
     end
 
     test "chains n calls, merging captures in order" do
       stream = {tok(:A, "1"), tok(:A, "2"), tok(:A, "3")}
 
-      assert {:ok, 3, [0], %{x: [{:token, :A, "1"}, {:token, :A, "2"}, {:token, :A, "3"}]}} =
+      assert {:ok, 3, [0], [x: [{:token, :A, "1"}, {:token, :A, "2"}, {:token, :A, "3"}]]} =
                Parser.call_n_times(match(:A, :x), 3, stream, 0, [0], nil)
     end
 
@@ -145,7 +145,7 @@ defmodule Grammar.Native.Runtime.ParserTest do
     test "min mandatory, up to max total" do
       stream = {tok(:A, "1"), tok(:A, "2"), tok(:A, "3"), tok(:B, "stop")}
 
-      assert {:ok, 2, [0], %{x: [{:token, :A, "1"}, {:token, :A, "2"}]}} =
+      assert {:ok, 2, [0], [x: [{:token, :A, "1"}, {:token, :A, "2"}]]} =
                Parser.rep(match(:A, :x), 1, 2, stream, 0, [0], nil)
     end
 
@@ -159,7 +159,7 @@ defmodule Grammar.Native.Runtime.ParserTest do
     test "min mandatory, then unbounded (like plus/5 with a floor)" do
       stream = {tok(:A, "1"), tok(:A, "2"), tok(:A, "3")}
 
-      assert {:ok, 3, [0], %{x: [{:token, :A, "1"}, {:token, :A, "2"}, {:token, :A, "3"}]}} =
+      assert {:ok, 3, [0], [x: [{:token, :A, "1"}, {:token, :A, "2"}, {:token, :A, "3"}]]} =
                Parser.rep(match(:A, :x), 1, :infinity, stream, 0, [0], nil)
     end
 
@@ -192,7 +192,7 @@ defmodule Grammar.Native.Runtime.ParserTest do
   describe "and_pred/5 and not_pred/5" do
     test "and_pred succeeds without consuming when the inner rule matches" do
       stream = {tok(:A, "a")}
-      assert Parser.and_pred(match(:A, :x), stream, 0, [0], nil) == {:ok, 0, [0], %{}}
+      assert Parser.and_pred(match(:A, :x), stream, 0, [0], nil) == {:ok, 0, [0], []}
     end
 
     test "and_pred fails when the inner rule fails" do
@@ -205,7 +205,7 @@ defmodule Grammar.Native.Runtime.ParserTest do
     end
 
     test "not_pred succeeds without consuming when the inner rule fails" do
-      assert Parser.not_pred(always_fail(), {}, 0, [0], nil) == {:ok, 0, [0], %{}}
+      assert Parser.not_pred(always_fail(), {}, 0, [0], nil) == {:ok, 0, [0], []}
     end
   end
 
@@ -214,7 +214,7 @@ defmodule Grammar.Native.Runtime.ParserTest do
       stream = {tok(:A, "a", column: 5)}
       body = fn s, p, ref_stack, c -> match(:A, :x).(s, p, ref_stack, c) end
 
-      assert {:ok, 1, [0], %{x: {:token, :A, "a"}}} =
+      assert {:ok, 1, [0], [x: {:token, :A, "a"}]} =
                Parser.indent_enter(body, stream, 0, [0], nil)
     end
 
@@ -232,7 +232,7 @@ defmodule Grammar.Native.Runtime.ParserTest do
     test "succeeds when the token's column exactly matches the reference" do
       stream = {tok(:A, "a", column: 3)}
 
-      assert {:ok, 1, [3], %{x: {:token, :A, "a"}}} =
+      assert {:ok, 1, [3], [x: {:token, :A, "a"}]} =
                Parser.samecol_check(match(:A, :x), stream, 0, [3], nil)
     end
 

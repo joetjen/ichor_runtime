@@ -20,7 +20,7 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{tok(:A, "a"), 0, 1}]
 
-      assert Captures.build(production, entries, {}) == %{x: {:token, :A, "a"}}
+      assert Captures.build(production, entries, {}) == [x: {:token, :A, "a"}]
     end
 
     test "a CustomLexeme-attached capture override is used verbatim instead" do
@@ -33,7 +33,7 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{tok(:A, "a", capture: {:text, "override"}), 0, 1}]
 
-      assert Captures.build(production, entries, {}) == %{x: {:text, "override"}}
+      assert Captures.build(production, entries, {}) == [x: {:text, "override"}]
     end
   end
 
@@ -46,10 +46,10 @@ defmodule Grammar.LRTable.CapturesTest do
         captures: [{0, :sub, :rule}]
       }
 
-      entries = [{%{n: {:token, :NUM, "1"}}, 0, 1}]
+      entries = [{[n: {:token, :NUM, "1"}], 0, 1}]
 
       assert Captures.build(production, entries, {}) ==
-               %{sub: {:rule, :expr, %{n: {:token, :NUM, "1"}}}}
+               [sub: {:rule, :expr, [n: {:token, :NUM, "1"}]}]
     end
   end
 
@@ -65,7 +65,7 @@ defmodule Grammar.LRTable.CapturesTest do
       stream = {tok(:A, "foo"), tok(:B, "bar"), tok(:C, "baz")}
       entries = [{:ignored, 0, 2}]
 
-      assert Captures.build(production, entries, stream) == %{span: {:text, "foobar"}}
+      assert Captures.build(production, entries, stream) == [span: {:text, "foobar"}]
     end
 
     test "an empty span concatenates to an empty string" do
@@ -77,12 +77,12 @@ defmodule Grammar.LRTable.CapturesTest do
       }
 
       entries = [{:ignored, 0, 0}]
-      assert Captures.build(production, entries, {}) == %{span: {:text, ""}}
+      assert Captures.build(production, entries, {}) == [span: {:text, ""}]
     end
   end
 
   describe "build/3: :splice capture" do
-    test "merges every key of the nested captures map directly into the result" do
+    test "merges every key of the nested captures list directly into the result" do
       production = %Production{
         id: 0,
         lhs: :r,
@@ -90,7 +90,7 @@ defmodule Grammar.LRTable.CapturesTest do
         captures: [{0, nil, :splice}]
       }
 
-      nested = %{op: [{:token, :PLUS, "+"}], term: {:token, :NUM, "1"}}
+      nested = [op: [{:token, :PLUS, "+"}], term: {:token, :NUM, "1"}]
       entries = [{nested, 0, 1}]
 
       assert Captures.build(production, entries, {}) == nested
@@ -106,12 +106,12 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [
         {tok(:NUM, "1"), 0, 1},
-        {%{term: {:token, :NUM, "2"}}, 1, 2}
+        {[term: {:token, :NUM, "2"}], 1, 2}
       ]
 
-      assert Captures.build(production, entries, {}) == %{
+      assert Captures.build(production, entries, {}) == [
                term: [{:token, :NUM, "1"}, {:token, :NUM, "2"}]
-             }
+             ]
     end
   end
 
@@ -126,9 +126,9 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{tok(:A, "a"), 0, 1}, {tok(:B, "b"), 1, 2}]
 
-      assert Captures.build(production, entries, {}) == %{
+      assert Captures.build(production, entries, {}) == [
                x: [{:token, :A, "a"}, {:token, :B, "b"}]
-             }
+             ]
     end
 
     test "three occurrences: appended, not re-wrapped" do
@@ -141,34 +141,54 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{tok(:A, "a"), 0, 1}, {tok(:B, "b"), 1, 2}, {tok(:C, "c"), 2, 3}]
 
-      assert Captures.build(production, entries, {}) == %{
+      assert Captures.build(production, entries, {}) == [
                x: [{:token, :A, "a"}, {:token, :B, "b"}, {:token, :C, "c"}]
-             }
+             ]
     end
   end
 
-  describe "build/3: an empty captures list builds an empty map" do
+  describe "build/3: distinct names land in first-occurrence RHS order" do
+    test "a repeated first name doesn't move a later distinct name" do
+      production = %Production{
+        id: 0,
+        lhs: :r,
+        rhs: [{:terminal, :A}, {:terminal, :B}, {:terminal, :C}],
+        captures: [{0, :x, :token}, {1, :y, :token}, {2, :x, :token}]
+      }
+
+      entries = [{tok(:A, "a"), 0, 1}, {tok(:B, "b"), 1, 2}, {tok(:C, "c"), 2, 3}]
+
+      assert Captures.build(production, entries, {}) == [
+               x: [{:token, :A, "a"}, {:token, :C, "c"}],
+               y: {:token, :B, "b"}
+             ]
+    end
+  end
+
+  describe "build/3: an empty captures list builds an empty list" do
     test "no captures declared, whatever the entries" do
       production = %Production{id: 0, lhs: :r, rhs: [{:terminal, :A}], captures: []}
-      assert Captures.build(production, [{tok(:A, "a"), 0, 1}], {}) == %{}
+      assert Captures.build(production, [{tok(:A, "a"), 0, 1}], {}) == []
     end
   end
 
   describe "merge/3" do
-    test "a new key is set as-is" do
-      assert Captures.merge(%{}, :x, 1) == %{x: 1}
+    test "a new key is set as-is, appended at the end" do
+      assert Captures.merge([], :x, 1) == [x: 1]
+      assert Captures.merge([a: 1], :b, 2) == [a: 1, b: 2]
     end
 
-    test "a second occurrence wraps both into a list" do
-      assert Captures.merge(%{x: 1}, :x, 2) == %{x: [1, 2]}
+    test "a second occurrence wraps both into a list, in place" do
+      assert Captures.merge([x: 1], :x, 2) == [x: [1, 2]]
+      assert Captures.merge([a: 1, x: 1, b: 2], :x, 9) == [a: 1, x: [1, 9], b: 2]
     end
 
     test "a third+ occurrence appends to the existing list" do
-      assert Captures.merge(%{x: [1, 2]}, :x, 3) == %{x: [1, 2, 3]}
+      assert Captures.merge([x: [1, 2]], :x, 3) == [x: [1, 2, 3]]
     end
 
     test "unrelated keys are untouched" do
-      assert Captures.merge(%{a: 1}, :b, 2) == %{a: 1, b: 2}
+      assert Captures.merge([a: 1], :b, 2) == [a: 1, b: 2]
     end
   end
 end

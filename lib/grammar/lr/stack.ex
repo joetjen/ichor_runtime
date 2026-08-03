@@ -15,11 +15,12 @@ defmodule Grammar.LR.Stack do
   needed for a `:text`-kind capture's span regardless of which RHS
   position it sits at (`Grammar.LRTable.Captures`). `value` is the
   shifted `%Grammar.VM.Token{}` itself, or a reduced nonterminal's own
-  already-built captures map.
+  already-built raw-captures list.
   """
 
   alias Grammar.LRTable.{Captures, Production}
   alias Grammar.VM.Token
+  alias Ichor.Capture
 
   @type entry :: {state :: term(), non_neg_integer(), non_neg_integer(), term()}
 
@@ -38,7 +39,7 @@ defmodule Grammar.LR.Stack do
   (both `pos`, for a zero-width/epsilon production).
   """
   @spec reduce([entry()], Production.t(), tuple(), non_neg_integer()) ::
-          {term(), [entry()], non_neg_integer(), non_neg_integer(), map()}
+          {term(), [entry()], non_neg_integer(), non_neg_integer(), Capture.raw_captures()}
   def reduce(stack, %Production{} = production, stream, pos) do
     n = length(production.rhs)
     {popped_rev, rest_stack} = Enum.split(stack, n)
@@ -58,7 +59,14 @@ defmodule Grammar.LR.Stack do
   end
 
   @doc "Pushes a reduced nonterminal's captures onto `rest_stack` (as returned by `reduce/4`), landing in `target_state`."
-  @spec push_reduced([entry()], term(), non_neg_integer(), non_neg_integer(), map()) :: [entry()]
+  @spec push_reduced(
+          [entry()],
+          term(),
+          non_neg_integer(),
+          non_neg_integer(),
+          Capture.raw_captures()
+        ) ::
+          [entry()]
   def push_reduced(rest_stack, target_state, start_pos, end_pos, captures),
     do: [{target_state, start_pos, end_pos, captures} | rest_stack]
 end

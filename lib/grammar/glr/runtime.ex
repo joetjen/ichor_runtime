@@ -14,7 +14,7 @@ defmodule Grammar.GLR.Runtime do
   alias Grammar.GLR.GSS
   alias Grammar.LRTable
   alias Grammar.LRTable.{Captures, Production}
-  alias Ichor.Error
+  alias Ichor.{Capture, Error}
 
   @type action_fn :: (Grammar.LRTable.state_id(), atom() -> [LRTable.action()])
   @type goto_fn :: (Grammar.LRTable.state_id(), atom() -> Grammar.LRTable.state_id() | nil)
@@ -27,7 +27,7 @@ defmodule Grammar.GLR.Runtime do
           Grammar.LRTable.state_id(),
           atom(),
           tuple()
-        ) :: {:ok, non_neg_integer(), map()} | {:error, Error.t()}
+        ) :: {:ok, non_neg_integer(), Capture.raw_captures()} | {:error, Error.t()}
   def run(action_fn, goto_fn, productions, start_state, end_symbol, stream) do
     start_node = {start_state, 0}
 
