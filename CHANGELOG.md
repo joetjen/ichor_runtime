@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-08-03
 
 ### Fixed
 
@@ -64,5 +64,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     logic-language evaluation models), `Ichor.Toolkit.Result`
     (`reduce_ok`/`map_ok`).
 
-[Unreleased]: https://github.com/joetjen/ichor_runtime/compare/v0.1.0...HEAD
+[0.2.0]: https://github.com/joetjen/ichor_runtime/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/joetjen/ichor_runtime/releases/tag/v0.1.0
