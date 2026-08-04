@@ -2,6 +2,7 @@
 
 [![Hex.pm](https://img.shields.io/hexpm/v/ichor_runtime.svg)](https://hex.pm/packages/ichor_runtime)
 [![Documentation](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/ichor_runtime)
+[![Docs (main)](https://img.shields.io/badge/docs-main-blueviolet.svg)](https://joetjen.github.io/ichor_runtime/)
 
 The small runtime support library [Ichor](https://hex.pm/packages/ichor)-generated
 parsers call into, plus a handful of standalone toolkit modules useful to
@@ -90,6 +91,12 @@ what an `Ichor.Actions` module actually receives at runtime. For the
 grammar-authoring side of things -- writing `.aether` grammars,
 `mix ichor.gen`, `use Ichor` -- see
 [Ichor's own docs](https://hexdocs.pm/ichor).
+
+Released versions are documented on
+[hexdocs.pm/ichor_runtime](https://hexdocs.pm/ichor_runtime); docs for
+the unreleased `main` branch are published to
+[joetjen.github.io/ichor_runtime](https://joetjen.github.io/ichor_runtime/)
+on every push (see `.github/workflows/docs.yml`).
 
 ## Development
 

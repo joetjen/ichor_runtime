@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Docs for the `main` branch are now published to GitHub Pages
+  (`.github/workflows/docs.yml`) on every push, at
+  [joetjen.github.io/ichor_runtime](https://joetjen.github.io/ichor_runtime/).
+  Released versions continue to be documented on hexdocs.pm;
+  `mix.exs`'s `docs()` sets a `canonical` URL pointing there so the two
+  copies don't compete as duplicate content.
+
 ## [0.2.0] - 2026-08-03
 
 ### Fixed
