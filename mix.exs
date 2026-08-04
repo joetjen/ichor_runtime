@@ -98,6 +98,10 @@ defmodule IchorRuntime.MixProject do
       main: "readme",
       source_url: "https://github.com/joetjen/ichor_runtime",
       source_ref: "v#{@version}",
+      # docs.yml publishes this same output to GitHub Pages (latest `main`,
+      # ahead of releases); point search engines at the released hexdocs
+      # copy instead so the two don't compete as duplicate content.
+      canonical: "https://hexdocs.pm/ichor_runtime",
       extras: ["README.md", "CHEATSHEET.md", "CHANGELOG.md", "LICENSE"],
       groups_for_modules: groups_for_modules()
     ]
