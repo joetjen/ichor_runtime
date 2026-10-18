@@ -73,14 +73,38 @@ defmodule Grammar.SourceTest do
       assert {Source.placed(error, "1 +\n").line, Source.placed(error, "1 +\n").column} == {2, 1}
     end
 
-    test "leaves an error that says where as it is" do
+    test "leaves where an error that says where is" do
       error = Ichor.Error.new(message: "x", stage: :parser, line: 1, column: 2)
-      assert Source.placed(error, "abc") == error
+      placed = Source.placed(error, "abc")
+      assert {placed.line, placed.column, placed.message} == {1, 2, "x"}
     end
 
     test "places each error of a list" do
       error = Ichor.Error.new(message: "x", stage: :parser)
       assert [%{line: 1, column: 1}] = Source.placed([error], "")
+    end
+  end
+
+  describe "placed/2: every error shows where" do
+    test "gives an error with a position but no snippet the line it is on" do
+      error = Ichor.Error.new(message: "unexpected \"+\"", stage: :parser, line: 1, column: 3)
+      placed = Source.placed(error, "1++2")
+      assert placed.context_lines == "1 | 1++2\n  |   ^"
+      assert Ichor.Error.format(placed) == "1:3: unexpected \"+\"\n1 | 1++2\n  |   ^"
+    end
+
+    test "and one at the end of the input the end of its last line" do
+      error = Ichor.Error.new(message: "unexpected end of input", stage: :parser)
+
+      assert Ichor.Error.format(Source.placed(error, "1+")) ==
+               "1:3: unexpected end of input\n1 | 1+\n  |   ^"
+    end
+
+    test "leaves a snippet an error already has as it is" do
+      error =
+        Ichor.Error.new(message: "x", stage: :parser, line: 1, column: 1, context_lines: "given")
+
+      assert Source.placed(error, "abc").context_lines == "given"
     end
   end
 end

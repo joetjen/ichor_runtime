@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   token stream is -- its token, or past the last one the end of the
   input -- and an error that says nowhere placed at the end of the
   input. No input at all is line 1, column 1.
+- **Every error shows where**: `Grammar.Source.placed/2` also gives an
+  error with a position and no snippet the line it is on and a caret,
+  so an LR or GLR error renders like a PEG one -- it used to say where
+  and show nothing.
 - **`Grammar.LRTable.unexpected_error/3`**: "unexpected end of input"
   with the end of the input's line and column. `unexpected_error/2`
   stays for parsers generated before it.
