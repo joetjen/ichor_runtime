@@ -87,7 +87,7 @@ defmodule IchorRuntime.MixProject do
 
   defp package do
     [
-      licenses: ["MIT"],
+      licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/joetjen/ichor_runtime"},
       files: ~w(lib .formatter.exs mix.exs README.md CHEATSHEET.md CHANGELOG.md LICENSE)
     ]
