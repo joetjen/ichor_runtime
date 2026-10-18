@@ -2,6 +2,7 @@
 
 [![Hex.pm](https://img.shields.io/hexpm/v/ichor_runtime.svg)](https://hex.pm/packages/ichor_runtime)
 [![Documentation](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/ichor_runtime)
+[![Docs (main)](https://img.shields.io/badge/docs-main-blueviolet.svg)](https://joetjen.github.io/ichor_runtime/)
 
 The small runtime support library [Ichor](https://hex.pm/packages/ichor)-generated
 parsers call into, plus a handful of standalone toolkit modules useful to
@@ -32,8 +33,8 @@ including in a `mix release` build.
 ```elixir
 def deps do
   [
-    {:ichor_runtime, "~> 0.1.0"},
-    {:ichor, "~> 0.2.0", only: :dev, runtime: false}
+    {:ichor_runtime, "~> 0.3.0"},
+    {:ichor, "~> 0.4.0", only: :dev, runtime: false}
   ]
 end
 ```
@@ -91,6 +92,12 @@ grammar-authoring side of things -- writing `.aether` grammars,
 `mix ichor.gen`, `use Ichor` -- see
 [Ichor's own docs](https://hexdocs.pm/ichor).
 
+Released versions are documented on
+[hexdocs.pm/ichor_runtime](https://hexdocs.pm/ichor_runtime); docs for
+the unreleased `main` branch are published to
+[joetjen.github.io/ichor_runtime](https://joetjen.github.io/ichor_runtime/)
+on every push (see `.github/workflows/docs.yml`).
+
 ## Development
 
 ```sh
@@ -103,4 +110,4 @@ mix precommit
 
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+Apache-2.0 -- see [LICENSE](LICENSE).

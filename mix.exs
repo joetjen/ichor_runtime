@@ -1,7 +1,7 @@
 defmodule IchorRuntime.MixProject do
   use Mix.Project
 
-  @version "0.2.0"
+  @version "0.3.0"
 
   # `mix precommit` includes `test` as a step; without this, Mix runs
   # the whole alias chain (including `mix test`) in :dev, and `mix test`
@@ -87,7 +87,7 @@ defmodule IchorRuntime.MixProject do
 
   defp package do
     [
-      licenses: ["MIT"],
+      licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/joetjen/ichor_runtime"},
       files: ~w(lib .formatter.exs mix.exs README.md CHEATSHEET.md CHANGELOG.md LICENSE)
     ]
@@ -98,6 +98,10 @@ defmodule IchorRuntime.MixProject do
       main: "readme",
       source_url: "https://github.com/joetjen/ichor_runtime",
       source_ref: "v#{@version}",
+      # docs.yml publishes this same output to GitHub Pages (latest `main`,
+      # ahead of releases); point search engines at the released hexdocs
+      # copy instead so the two don't compete as duplicate content.
+      canonical: "https://hexdocs.pm/ichor_runtime",
       extras: ["README.md", "CHEATSHEET.md", "CHANGELOG.md", "LICENSE"],
       groups_for_modules: groups_for_modules()
     ]
