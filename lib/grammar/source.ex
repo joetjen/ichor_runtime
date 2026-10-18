@@ -74,7 +74,8 @@ defmodule Grammar.Source do
 
   @doc """
   `error` -- or each of a list of them -- placed at the end of `input`
-  when it says nowhere, and otherwise as it is.
+  when it says nowhere, and shown: given the line of `input` it is on,
+  and a caret, when it has a position but no snippet.
 
   For a caller that gets its error from somewhere that never saw the
   input: `Grammar.GLR.Runtime` builds "unexpected end of input" from
@@ -86,8 +87,28 @@ defmodule Grammar.Source do
 
   def placed(%Error{line: nil} = error, input) do
     {line, column} = position({}, 0, input)
-    %{error | line: line, column: column}
+    shown(%{error | line: line, column: column}, input)
   end
 
-  def placed(%Error{} = error, _input), do: error
+  def placed(%Error{} = error, input), do: shown(error, input)
+
+  # **Every error shows where, too**: one with a position and no snippet
+  # gets the line it is on and a caret, as one built with its source
+  # always had. The shift-reduce runtimes build theirs from the token
+  # stream alone, so an LR or GLR error used to say where and show
+  # nothing -- less than a PEG error, for the same mistake.
+  defp shown(%Error{context_lines: nil, line: line} = error, input) when not is_nil(line) do
+    Error.new(
+      message: error.message,
+      line: error.line,
+      column: error.column,
+      file: error.file,
+      expected: error.expected,
+      found: error.found,
+      stage: error.stage,
+      source: input
+    )
+  end
+
+  defp shown(error, _input), do: error
 end
