@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`Grammar.Source.trimmed/2`**: a token stream without the `@skip`
+  tokens before its first other token and after its last, which every
+  engine and backend now applies before matching the root, so trivia
+  around an input means the same to all of them.
+- **`Grammar.Source.position/3` and `placed/2`**: where a position in a
+  token stream is -- its token, or past the last one the end of the
+  input -- and an error that says nowhere placed at the end of the
+  input. No input at all is line 1, column 1.
+- **`Grammar.LRTable.unexpected_error/3`**: "unexpected end of input"
+  with the end of the input's line and column. `unexpected_error/2`
+  stays for parsers generated before it.
 - Docs for the `main` branch are now published to GitHub Pages
   (`.github/workflows/docs.yml`) on every push, at
   [joetjen.github.io/ichor_runtime](https://joetjen.github.io/ichor_runtime/).
