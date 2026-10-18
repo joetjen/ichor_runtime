@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Licensed under the Apache License 2.0 (`Apache-2.0`); it was MIT.
+
 ### Added
 
 - **`Grammar.Source.trimmed/2`**: a token stream without the `@skip`
