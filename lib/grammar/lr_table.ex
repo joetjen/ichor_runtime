@@ -40,7 +40,13 @@ defmodule Grammar.LRTable do
     if pos >= tuple_size(stream), do: end_symbol, else: elem(stream, pos).name
   end
 
-  @doc "The shared \"no action applies here\" parse error, naming the offending token (or end of input)."
+  @doc """
+  The shared "no action applies here" parse error, naming the offending
+  token (or end of input).
+
+  Without the input, the end of it has no position; `unexpected_error/3`
+  has one. This arity stays for parsers generated before it existed.
+  """
   @spec unexpected_error(tuple(), non_neg_integer()) :: Error.t()
   def unexpected_error(stream, pos) when pos >= tuple_size(stream) do
     Error.new(message: "unexpected end of input", stage: :parser)
@@ -56,4 +62,17 @@ defmodule Grammar.LRTable do
       column: col
     )
   end
+
+  @doc """
+  Like `unexpected_error/2`, and end of input is placed at the end of
+  `input` (`Grammar.Source.position/3`), so every error says where it
+  is.
+  """
+  @spec unexpected_error(tuple(), non_neg_integer(), String.t()) :: Error.t()
+  def unexpected_error(stream, pos, input) when pos >= tuple_size(stream) do
+    {line, column} = Grammar.Source.position(stream, pos, input)
+    Error.new(message: "unexpected end of input", stage: :parser, line: line, column: column)
+  end
+
+  def unexpected_error(stream, pos, _input), do: unexpected_error(stream, pos)
 end

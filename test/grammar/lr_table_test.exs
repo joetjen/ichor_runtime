@@ -36,4 +36,24 @@ defmodule Grammar.LRTableTest do
       assert error.message =~ "end of input"
     end
   end
+
+  describe "unexpected_error/3" do
+    test "places end of input at the end of the input" do
+      stream = {%Token{name: :PLUS, text: "+", line: 1, column: 1}}
+      error = LRTable.unexpected_error(stream, 1, "+ \n ")
+      assert {error.message, error.line, error.column} == {"unexpected end of input", 2, 2}
+    end
+
+    test "places no input at all at the first line and column" do
+      error = LRTable.unexpected_error({}, 0, "")
+      assert {error.line, error.column} == {1, 1}
+    end
+
+    test "names and places the offending token as unexpected_error/2 does" do
+      stream = {%Token{name: :PLUS, text: "+", line: 3, column: 4}}
+      error = LRTable.unexpected_error(stream, 0, "...")
+      assert {error.line, error.column} == {3, 4}
+      assert error.message =~ ~s("+")
+    end
+  end
 end
