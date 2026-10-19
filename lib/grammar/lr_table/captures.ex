@@ -57,9 +57,28 @@ defmodule Grammar.LRTable.Captures do
     merge(acc, name, {:text, concat_text(stream, start_pos, end_pos)})
   end
 
+  # A helper's captures are already merged: a name it holds more than
+  # once is a list. Spliced into a key this production already holds, the
+  # list is that many more occurrences -- appended element by element, as
+  # `Grammar.Native.Runtime.Parser.merge_captures/2` does -- never one
+  # value nested in it. `doc := entry+` with three entries used to come
+  # out as `[a, [b, c]]`.
   defp apply_capture(acc, :splice, _name, {captures, _s, _e}, _rhs, _idx, _stream) do
-    Enum.reduce(captures, acc, fn {k, v}, acc2 -> merge(acc2, k, v) end)
+    Enum.reduce(captures, acc, fn {k, v}, acc2 -> spliced(acc2, k, v) end)
   end
+
+  defp spliced(acc, name, value) do
+    case List.keyfind(acc, name, 0) do
+      nil ->
+        acc ++ [{name, value}]
+
+      {^name, existing} ->
+        List.keyreplace(acc, name, 0, {name, as_list(existing) ++ as_list(value)})
+    end
+  end
+
+  defp as_list(value) when is_list(value), do: value
+  defp as_list(value), do: [value]
 
   defp concat_text(stream, start_pos, end_pos) do
     Enum.map_join(start_pos..(end_pos - 1)//1, "", fn i -> elem(stream, i).text end)

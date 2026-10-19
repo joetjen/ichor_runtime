@@ -113,6 +113,27 @@ defmodule Grammar.LRTable.CapturesTest do
                term: [{:token, :NUM, "1"}, {:token, :NUM, "2"}]
              ]
     end
+
+    # `doc := entry+` with three entries: the helper holds `[b, c]`, the
+    # production `a` -- the list is one more run of the same name, never
+    # a single value nested inside it.
+    test "splices a list into an already-populated key as its elements, not as one value" do
+      production = %Production{
+        id: 0,
+        lhs: :r,
+        rhs: [{:terminal, :NUM}, {:nonterminal, :helper}],
+        captures: [{0, :term, :token}, {1, nil, :splice}]
+      }
+
+      entries = [
+        {tok(:NUM, "1"), 0, 1},
+        {[term: [{:token, :NUM, "2"}, {:token, :NUM, "3"}]], 1, 3}
+      ]
+
+      assert Captures.build(production, entries, {}) == [
+               term: [{:token, :NUM, "1"}, {:token, :NUM, "2"}, {:token, :NUM, "3"}]
+             ]
+    end
   end
 
   describe "build/3: the same capture name at multiple RHS positions promotes to a list" do
