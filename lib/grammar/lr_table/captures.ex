@@ -10,6 +10,11 @@ defmodule Grammar.LRTable.Captures do
   kind means), so this logic has exactly one place to live rather than
   two copies drifting apart.
 
+  Every value it builds records the token range it matched
+  (`Ichor.Capture.at/3`), for `Ichor.Actions` to turn into its span. A
+  helper's captures, spliced in, were recorded when the helper was
+  reduced and keep their ranges.
+
   Built as a list, in `production.captures`' own RHS-position order,
   rather than a map -- a name's position (first occurrence, for one
   captured more than once) is real information `Ichor.Actions` relies
@@ -43,18 +48,19 @@ defmodule Grammar.LRTable.Captures do
     end)
   end
 
-  defp apply_capture(acc, :token, name, {%Token{} = token, _s, _e}, _rhs, _idx, _stream) do
+  defp apply_capture(acc, :token, name, {%Token{} = token, s, e}, _rhs, _idx, _stream) do
     value = if is_nil(token.capture), do: {:token, token.name, token.text}, else: token.capture
-    merge(acc, name, value)
+    merge(acc, name, Capture.at(value, s, e))
   end
 
-  defp apply_capture(acc, :rule, name, {captures, _s, _e}, rhs, idx, _stream) do
+  defp apply_capture(acc, :rule, name, {captures, s, e}, rhs, idx, _stream) do
     {:nonterminal, ref_name} = Enum.at(rhs, idx)
-    merge(acc, name, {:rule, ref_name, captures})
+    merge(acc, name, Capture.at({:rule, ref_name, captures}, s, e))
   end
 
   defp apply_capture(acc, :text, name, {_value, start_pos, end_pos}, _rhs, _idx, stream) do
-    merge(acc, name, {:text, concat_text(stream, start_pos, end_pos)})
+    text = concat_text(stream, start_pos, end_pos)
+    merge(acc, name, Capture.at({:text, text}, start_pos, end_pos))
   end
 
   # A helper's captures are already merged: a name it holds more than
