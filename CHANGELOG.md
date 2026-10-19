@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An LR or GLR rule repeated three times or more is a flat list.**
+  Splicing a repetition's helper into a capture the production already
+  held nested the helper's list as one value: `doc := entry+` with three
+  entries gave `[a, [b, c]]`, which `Ichor.Actions` could not evaluate.
+  The splice now appends the list's elements, as the PEG backends do.
 - **`Grammar.Source.placed/2` keeps every field of an error it shows.**
   It rebuilt the error field by field, so a field it did not name was
   lost; it now fills in only the snippet.
