@@ -97,17 +97,13 @@ defmodule Grammar.Source do
   # always had. The shift-reduce runtimes build theirs from the token
   # stream alone, so an LR or GLR error used to say where and show
   # nothing -- less than a PEG error, for the same mistake.
+  #
+  # Only the snippet is filled in, by updating the error rather than
+  # rebuilding it field by field: a rebuild has to name every field, and
+  # one it forgets -- `data`, before 0.4.0 -- is silently lost.
   defp shown(%Error{context_lines: nil, line: line} = error, input) when not is_nil(line) do
-    Error.new(
-      message: error.message,
-      line: error.line,
-      column: error.column,
-      file: error.file,
-      expected: error.expected,
-      found: error.found,
-      stage: error.stage,
-      source: input
-    )
+    snippet = Error.new(message: "", line: line, column: error.column, source: input)
+    %{error | context_lines: snippet.context_lines}
   end
 
   defp shown(error, _input), do: error

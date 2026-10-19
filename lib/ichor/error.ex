@@ -7,6 +7,11 @@ defmodule Ichor.Error do
   `context_lines` is pre-rendered at construction time, not lazily
   computed on access: cheap to do once, and keeps every stage's error
   output visually consistent.
+
+  `data` is whatever a stage wants to hand through with its error --
+  most often an action failing with its own domain error, wrapped here
+  so the parser's result stays an `Ichor.Error` and its caller unwraps
+  it. Ichor itself never sets or reads it, and `format/1` ignores it.
   """
 
   @type stage :: :lexer | :parser | :analysis | :action
@@ -19,16 +24,17 @@ defmodule Ichor.Error do
           context_lines: String.t() | nil,
           expected: term(),
           found: term(),
-          stage: stage() | nil
+          stage: stage() | nil,
+          data: term()
         }
 
-  defstruct [:message, :line, :column, :file, :context_lines, :expected, :found, :stage]
+  defstruct [:message, :line, :column, :file, :context_lines, :expected, :found, :stage, :data]
 
   @doc """
   Builds a `Ichor.Error`, pre-rendering `context_lines` immediately.
 
   Accepts `:message` (required), `:stage`, `:line`, `:column`, `:file`,
-  `:expected`, `:found`, and either `:source` (the full source text, used
+  `:expected`, `:found`, `:data`, and either `:source` (the full source text, used
   to render a caret-annotated snippet at `:line`/`:column`) or a
   pre-rendered `:context_lines` directly, for callers that already have
   one (e.g. re-wrapping an error from another stage).
@@ -71,7 +77,8 @@ defmodule Ichor.Error do
       context_lines: context_lines,
       expected: Keyword.get(opts, :expected),
       found: Keyword.get(opts, :found),
-      stage: Keyword.get(opts, :stage)
+      stage: Keyword.get(opts, :stage),
+      data: Keyword.get(opts, :data)
     }
   end
 
