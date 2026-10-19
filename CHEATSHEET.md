@@ -56,6 +56,13 @@ end
 - Errors are `%Ichor.Error{}` (`Ichor.Error.new/1`, `Ichor.Error.format/1`)
   -- the same struct every stage (lexer, parser, your own actions) uses,
   so error output looks consistent regardless of where it came from.
+- `.span` is where a capture matched, `{line, column, length}` (nil for
+  a node handed to `evaluate_node/3`); a default `%Ichor.Node{}` has its
+  rule's span too.
+- An action's error with no line is placed where its rule or token
+  matched and shown with a caret: return `{:error, Ichor.Error.new(message:
+  "...", stage: :action)}` and the user is pointed at the text. An error
+  that already has a line keeps it.
 
 ## `@native(...)` callbacks
 

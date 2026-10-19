@@ -5,8 +5,47 @@ defmodule Grammar.LRTable.CapturesTest do
   alias Grammar.LRTable.Production
   alias Grammar.VM.Token
 
+  # The shape `build/3` gives, without the positions it records --
+  # those are "recorded positions"' own subject.
+  defp build(production, entries, stream),
+    do: Ichor.Capture.plain(Captures.build(production, entries, stream))
+
   defp tok(name, text, opts \\ []) do
     %Token{name: name, text: text, line: 1, column: 1, capture: Keyword.get(opts, :capture)}
+  end
+
+  describe "build/3: recorded positions" do
+    test "every value a production captures records the token range it matched" do
+      production = %Production{
+        id: 0,
+        lhs: :r,
+        rhs: [{:terminal, :A}, {:nonterminal, :expr}, {:terminal, :B}],
+        captures: [{0, :a, :token}, {1, :sub, :rule}, {2, :b, :text}]
+      }
+
+      stream = {tok(:A, "a"), tok(:NUM, "1"), tok(:NUM, "2"), tok(:B, "b")}
+      entries = [{tok(:A, "a"), 0, 1}, {[n: {:token, :NUM, "1"}], 1, 3}, {tok(:B, "b"), 3, 4}]
+
+      assert Captures.build(production, entries, stream) == [
+               a: Ichor.Capture.at({:token, :A, "a"}, 0, 1),
+               sub: Ichor.Capture.at({:rule, :expr, [n: {:token, :NUM, "1"}]}, 1, 3),
+               b: Ichor.Capture.at({:text, "b"}, 3, 4)
+             ]
+    end
+
+    test "a helper's spliced captures keep the ranges they were recorded with" do
+      production = %Production{
+        id: 0,
+        lhs: :r,
+        rhs: [{:nonterminal, :"$star_1"}],
+        captures: [{0, nil, :splice}]
+      }
+
+      recorded = Ichor.Capture.at({:token, :NUM, "1"}, 0, 1)
+      entries = [{[n: recorded], 0, 1}]
+
+      assert Captures.build(production, entries, {}) == [n: recorded]
+    end
   end
 
   describe "build/3: :token capture" do
@@ -20,7 +59,7 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{tok(:A, "a"), 0, 1}]
 
-      assert Captures.build(production, entries, {}) == [x: {:token, :A, "a"}]
+      assert build(production, entries, {}) == [x: {:token, :A, "a"}]
     end
 
     test "a CustomLexeme-attached capture override is used verbatim instead" do
@@ -33,7 +72,7 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{tok(:A, "a", capture: {:text, "override"}), 0, 1}]
 
-      assert Captures.build(production, entries, {}) == [x: {:text, "override"}]
+      assert build(production, entries, {}) == [x: {:text, "override"}]
     end
   end
 
@@ -48,7 +87,7 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{[n: {:token, :NUM, "1"}], 0, 1}]
 
-      assert Captures.build(production, entries, {}) ==
+      assert build(production, entries, {}) ==
                [sub: {:rule, :expr, [n: {:token, :NUM, "1"}]}]
     end
   end
@@ -65,7 +104,7 @@ defmodule Grammar.LRTable.CapturesTest do
       stream = {tok(:A, "foo"), tok(:B, "bar"), tok(:C, "baz")}
       entries = [{:ignored, 0, 2}]
 
-      assert Captures.build(production, entries, stream) == [span: {:text, "foobar"}]
+      assert build(production, entries, stream) == [span: {:text, "foobar"}]
     end
 
     test "an empty span concatenates to an empty string" do
@@ -77,7 +116,7 @@ defmodule Grammar.LRTable.CapturesTest do
       }
 
       entries = [{:ignored, 0, 0}]
-      assert Captures.build(production, entries, {}) == [span: {:text, ""}]
+      assert build(production, entries, {}) == [span: {:text, ""}]
     end
   end
 
@@ -93,7 +132,7 @@ defmodule Grammar.LRTable.CapturesTest do
       nested = [op: [{:token, :PLUS, "+"}], term: {:token, :NUM, "1"}]
       entries = [{nested, 0, 1}]
 
-      assert Captures.build(production, entries, {}) == nested
+      assert build(production, entries, {}) == nested
     end
 
     test "splices into an already-populated key, promoting to a list like any other merge" do
@@ -109,7 +148,7 @@ defmodule Grammar.LRTable.CapturesTest do
         {[term: {:token, :NUM, "2"}], 1, 2}
       ]
 
-      assert Captures.build(production, entries, {}) == [
+      assert build(production, entries, {}) == [
                term: [{:token, :NUM, "1"}, {:token, :NUM, "2"}]
              ]
     end
@@ -130,7 +169,7 @@ defmodule Grammar.LRTable.CapturesTest do
         {[term: [{:token, :NUM, "2"}, {:token, :NUM, "3"}]], 1, 3}
       ]
 
-      assert Captures.build(production, entries, {}) == [
+      assert build(production, entries, {}) == [
                term: [{:token, :NUM, "1"}, {:token, :NUM, "2"}, {:token, :NUM, "3"}]
              ]
     end
@@ -147,7 +186,7 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{tok(:A, "a"), 0, 1}, {tok(:B, "b"), 1, 2}]
 
-      assert Captures.build(production, entries, {}) == [
+      assert build(production, entries, {}) == [
                x: [{:token, :A, "a"}, {:token, :B, "b"}]
              ]
     end
@@ -162,7 +201,7 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{tok(:A, "a"), 0, 1}, {tok(:B, "b"), 1, 2}, {tok(:C, "c"), 2, 3}]
 
-      assert Captures.build(production, entries, {}) == [
+      assert build(production, entries, {}) == [
                x: [{:token, :A, "a"}, {:token, :B, "b"}, {:token, :C, "c"}]
              ]
     end
@@ -179,7 +218,7 @@ defmodule Grammar.LRTable.CapturesTest do
 
       entries = [{tok(:A, "a"), 0, 1}, {tok(:B, "b"), 1, 2}, {tok(:C, "c"), 2, 3}]
 
-      assert Captures.build(production, entries, {}) == [
+      assert build(production, entries, {}) == [
                x: [{:token, :A, "a"}, {:token, :C, "c"}],
                y: {:token, :B, "b"}
              ]
@@ -189,7 +228,7 @@ defmodule Grammar.LRTable.CapturesTest do
   describe "build/3: an empty captures list builds an empty list" do
     test "no captures declared, whatever the entries" do
       production = %Production{id: 0, lhs: :r, rhs: [{:terminal, :A}], captures: []}
-      assert Captures.build(production, [{tok(:A, "a"), 0, 1}], {}) == []
+      assert build(production, [{tok(:A, "a"), 0, 1}], {}) == []
     end
   end
 
