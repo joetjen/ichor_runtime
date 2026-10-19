@@ -100,6 +100,12 @@ defmodule Grammar.SourceTest do
                "1:3: unexpected end of input\n1 | 1+\n  |   ^"
     end
 
+    test "keeps an error's data when it gives it its line" do
+      error = Ichor.Error.new(message: "x", stage: :parser, line: 1, column: 2, data: :mine)
+
+      assert Source.placed(error, "ab").data == :mine
+    end
+
     test "leaves a snippet an error already has as it is" do
       error =
         Ichor.Error.new(message: "x", stage: :parser, line: 1, column: 1, context_lines: "given")

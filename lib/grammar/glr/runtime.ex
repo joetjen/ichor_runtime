@@ -19,22 +19,42 @@ defmodule Grammar.GLR.Runtime do
   @type action_fn :: (Grammar.LRTable.state_id(), atom() -> [LRTable.action()])
   @type goto_fn :: (Grammar.LRTable.state_id(), atom() -> Grammar.LRTable.state_id() | nil)
 
-  @doc "Runs the GSS shift-reduce/fork loop over `stream`, starting from `start_state`, dispatching every lookup through `action_fn`/`goto_fn`."
+  @typedoc "Builds one reduction's captures: `Grammar.LRTable.Captures.build/3`, or `Ichor.Syntax.Record.reduced/3` for a lossless parse."
+  @type build_fn :: (Production.t(), [Captures.entry()], tuple() -> Capture.raw_captures())
+
+  @doc """
+  Runs the GSS shift-reduce/fork loop over `stream`, starting from
+  `start_state`, dispatching every lookup through `action_fn`/`goto_fn`.
+
+  `build` builds each reduction's captures. A lossless parse passes
+  `Ichor.Syntax.Record.reduced/3`, so the rules' records travel with
+  them, and the run picks the same derivation either way: a surviving
+  ambiguity is broken by provenance, which `build` never touches.
+  """
   @spec run(
           action_fn(),
           goto_fn(),
           %{non_neg_integer() => Production.t()},
           Grammar.LRTable.state_id(),
           atom(),
-          tuple()
+          tuple(),
+          build_fn()
         ) :: {:ok, non_neg_integer(), Capture.raw_captures()} | {:error, Error.t()}
-  def run(action_fn, goto_fn, productions, start_state, end_symbol, stream) do
+  def run(
+        action_fn,
+        goto_fn,
+        productions,
+        start_state,
+        end_symbol,
+        stream,
+        build \\ &Captures.build/3
+      ) do
     start_node = {start_state, 0}
 
     step(
       action_fn,
       goto_fn,
-      productions,
+      {productions, build},
       end_symbol,
       stream,
       0,
@@ -48,11 +68,13 @@ defmodule Grammar.GLR.Runtime do
   # node whose own reduces haven't run yet, or add a new edge into an
   # already-active one, unlocking paths a *previous* round's `paths/3`
   # call couldn't see yet) before any shift is attempted.
-  defp step(action_fn, goto_fn, productions, end_symbol, stream, pos, gss, active) do
+  # `plan` is `{productions, build}`: what a reduction needs, carried as
+  # one argument through every step down to `apply_reduce/9`.
+  defp step(action_fn, goto_fn, plan, end_symbol, stream, pos, gss, active) do
     lookahead = current_terminal(stream, pos, end_symbol)
 
     {gss, active} =
-      reduce_to_fixpoint(action_fn, goto_fn, productions, stream, pos, gss, active, lookahead)
+      reduce_to_fixpoint(action_fn, goto_fn, plan, stream, pos, gss, active, lookahead)
 
     accepting_nodes = Enum.filter(active, &accepting?(action_fn, &1, lookahead))
 
@@ -63,7 +85,7 @@ defmodule Grammar.GLR.Runtime do
         if MapSet.size(next_active) == 0 do
           {:error, LRTable.unexpected_error(stream, pos)}
         else
-          step(action_fn, goto_fn, productions, end_symbol, stream, pos + 1, gss, next_active)
+          step(action_fn, goto_fn, plan, end_symbol, stream, pos + 1, gss, next_active)
         end
 
       nodes ->
@@ -77,20 +99,20 @@ defmodule Grammar.GLR.Runtime do
   defp current_terminal(stream, pos, end_symbol),
     do: LRTable.current_terminal(stream, pos, end_symbol)
 
-  defp reduce_to_fixpoint(action_fn, goto_fn, productions, stream, pos, gss, active, lookahead) do
+  defp reduce_to_fixpoint(action_fn, goto_fn, plan, stream, pos, gss, active, lookahead) do
     {gss2, new_nodes} =
-      apply_all_reduces(action_fn, goto_fn, productions, stream, pos, gss, active, lookahead)
+      apply_all_reduces(action_fn, goto_fn, plan, stream, pos, gss, active, lookahead)
 
     active2 = MapSet.union(active, new_nodes)
 
     if gss2.edges == gss.edges do
       {gss2, active2}
     else
-      reduce_to_fixpoint(action_fn, goto_fn, productions, stream, pos, gss2, active2, lookahead)
+      reduce_to_fixpoint(action_fn, goto_fn, plan, stream, pos, gss2, active2, lookahead)
     end
   end
 
-  defp apply_all_reduces(action_fn, goto_fn, productions, stream, pos, gss, active, lookahead) do
+  defp apply_all_reduces(action_fn, goto_fn, plan, stream, pos, gss, active, lookahead) do
     Enum.reduce(active, {gss, MapSet.new()}, fn {state, _pos} = node, {gss, new_nodes} ->
       actions = action_fn.(state, lookahead)
       conflict? = length(actions) > 1
@@ -100,7 +122,7 @@ defmodule Grammar.GLR.Runtime do
       |> Enum.reduce({gss, new_nodes}, fn
         {{:reduce, prod_id}, idx}, {gss, new_nodes} ->
           marker = if conflict?, do: idx, else: nil
-          apply_reduce(goto_fn, productions, gss, new_nodes, stream, pos, node, prod_id, marker)
+          apply_reduce(goto_fn, plan, gss, new_nodes, stream, pos, node, prod_id, marker)
 
         {_other, _idx}, acc ->
           acc
@@ -110,7 +132,7 @@ defmodule Grammar.GLR.Runtime do
 
   defp apply_reduce(
          goto_fn,
-         productions,
+         plan,
          gss,
          new_nodes,
          stream,
@@ -119,6 +141,7 @@ defmodule Grammar.GLR.Runtime do
          prod_id,
          choice_marker
        ) do
+    {productions, build} = plan
     production = Map.fetch!(productions, prod_id)
     n = length(production.rhs)
 
@@ -128,7 +151,7 @@ defmodule Grammar.GLR.Runtime do
       target_state = goto_fn.(origin_state, production.lhs)
       target_node = {target_state, pos}
 
-      captures = Captures.build(production, entries, stream)
+      captures = build.(production, entries, stream)
       provenance = path_prov ++ List.wrap(choice_marker)
 
       gss2 = GSS.add_edge(gss, origin, target_node, captures, provenance)

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Ichor.Error` has a `data` field**: whatever a stage hands through
+  with its error -- most often an action failing with its own domain
+  error, which its caller unwraps. Nil unless something sets it;
+  `format/1` ignores it.
+- **The lossless tree, `Ichor.Syntax`**: every byte of an input, as
+  tokens -- trivia and punctuation included, with byte offsets, lines
+  and columns -- under every grammar rule that matched them
+  (`Ichor.Syntax.Node`, `Ichor.Syntax.Token`). `tree/3` weaves a token
+  stream into a parse's rule records; `text/1` is a node's input, and
+  the root's is the whole input, byte for byte; `tokens/1` its leaves.
+  Trivia never sits at a node's edge: it belongs to the deepest node
+  with something significant on both sides. The runtime half of
+  `ichor`'s lossless mode.
+- **`Ichor.Syntax.Record`**: how a lossless parser records its rules,
+  inside its ordinary captures, so backtracking and merging handle them
+  as they handle every capture.
+- **`Grammar.LR.Lossless`**: the LR loop for a lossless parse, table-driven
+  so the generated fast parser's state functions are left as they are.
+- **`Grammar.GLR.Runtime.run/7`**: takes the function that builds each
+  reduction's captures; `run/6` builds them as before.
+
+### Fixed
+
+- **`Grammar.Source.placed/2` keeps every field of an error it shows.**
+  It rebuilt the error field by field, so a field it did not name was
+  lost; it now fills in only the snippet.
+
 ## [0.3.0] - 2026-10-18
 
 ### Changed

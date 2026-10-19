@@ -33,6 +33,20 @@ defmodule Ichor.ErrorTest do
     assert error.context_lines == "12 | line 12\n   |   ^"
   end
 
+  describe "data" do
+    test "is nil unless something put it there" do
+      assert Error.new(message: "boom").data == nil
+    end
+
+    test "carries whatever a stage hands through with its error" do
+      assert Error.new(message: "boom", data: {:my_error, :key}).data == {:my_error, :key}
+    end
+
+    test "is not part of the formatted message" do
+      assert Error.format(Error.new(message: "boom", data: :anything)) == "boom"
+    end
+  end
+
   test "context_lines is nil when source or line is missing" do
     assert Error.new(message: "boom").context_lines == nil
     assert Error.new(message: "boom", source: "abc").context_lines == nil
@@ -71,8 +85,8 @@ defmodule Ichor.ErrorTest do
     assert Error.format(error) == "boom"
   end
 
-  test "the struct itself only has the eight documented fields" do
+  test "the struct itself only has the nine documented fields" do
     assert Map.keys(%Error{}) |> Enum.reject(&(&1 == :__struct__)) |> Enum.sort() ==
-             [:column, :context_lines, :expected, :file, :found, :line, :message, :stage]
+             [:column, :context_lines, :data, :expected, :file, :found, :line, :message, :stage]
   end
 end
