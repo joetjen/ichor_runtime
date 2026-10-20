@@ -67,6 +67,7 @@ defmodule IchorRuntime.MixProject do
   # (slowest, especially its first PLT build) runs last.
   defp aliases do
     [
+      docs: [&readme_for_docs/1, "docs"],
       precommit: [
         "format",
         "compile --warnings-as-errors",
@@ -78,11 +79,27 @@ defmodule IchorRuntime.MixProject do
     ]
   end
 
+  # The README for ExDoc: GitHub's `> [!WARNING]` alert, which ExDoc does
+  # not render, turned into ExDoc's own warning admonition. GitHub shows
+  # the README itself; HexDocs shows this copy under the same name. Run
+  # through the `docs` alias, which `mix hex.publish` builds through too.
+  # The same in every Elixir Ichor, Cooper and Dextrin.
+  defp readme_for_docs(_args) do
+    File.mkdir_p!("doc_src")
+
+    readme =
+      "README.md"
+      |> File.read!()
+      |> String.replace("> [!WARNING]", "> #### Warning {: .warning}")
+
+    File.write!("doc_src/README.md", readme)
+  end
+
   defp description do
-    "The small runtime support library Ichor-generated parsers call into: capture " <>
-      "dispatch, error formatting, compiled Tokenizer/Parser combinators, and the " <>
-      "LR/GLR runtime -- plus standalone Pratt precedence parsing, generic term " <>
-      "recursion, and unification/backtracking search. Ichor itself is dev-only."
+    "Under heavy development: not for production use before 1.0.0. " <>
+      "Runtime support for Ichor-generated parsers: capture dispatch, error formatting, " <>
+      "tokenizer and parser combinators, the LR/GLR runtime, Pratt precedence parsing, " <>
+      "term recursion and unification/backtracking. Ichor itself is dev-only."
   end
 
   defp package do
@@ -102,7 +119,14 @@ defmodule IchorRuntime.MixProject do
       # ahead of releases); point search engines at the released hexdocs
       # copy instead so the two don't compete as duplicate content.
       canonical: "https://hexdocs.pm/ichor_runtime",
-      extras: ["README.md", "CHEATSHEET.md", "CHANGELOG.md", "LICENSE"],
+      # The README as `readme_for_docs/1` rewrites it, so its warning is a
+      # box: same page name, same URL.
+      extras: [
+        {"doc_src/README.md", filename: "readme", source: "README.md"},
+        "CHEATSHEET.md",
+        "CHANGELOG.md",
+        "LICENSE"
+      ],
       groups_for_modules: groups_for_modules()
     ]
   end
