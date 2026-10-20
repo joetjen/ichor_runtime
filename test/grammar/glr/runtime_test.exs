@@ -32,7 +32,7 @@ defmodule Grammar.GLR.RuntimeTest do
       stream = {%Token{name: :X, text: "x", line: 1, column: 1}}
 
       assert Runtime.run(ctx.action_fn, ctx.goto_fn, ctx.productions, 0, @end_symbol, stream) ==
-               {:ok, 1, [x: {:token, :X, "x"}]}
+               {:ok, 1, [x: Ichor.Capture.at({:token, :X, "x"}, 0, 1)]}
     end
 
     test "fails with an unexpected-token error when nothing shifts", ctx do
@@ -93,7 +93,15 @@ defmodule Grammar.GLR.RuntimeTest do
       stream = {%Token{name: :X, text: "x", line: 1, column: 1}}
 
       assert Runtime.run(ctx.action_fn, ctx.goto_fn, ctx.productions, 0, @end_symbol, stream) ==
-               {:ok, 1, [a: {:rule, :a, [x: {:token, :X, "x"}]}]}
+               {:ok, 1,
+                [
+                  a:
+                    Ichor.Capture.at(
+                      {:rule, :a, [x: Ichor.Capture.at({:token, :X, "x"}, 0, 1)]},
+                      0,
+                      1
+                    )
+                ]}
     end
   end
 end

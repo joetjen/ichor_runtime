@@ -56,9 +56,11 @@ defmodule Grammar.LR.LosslessTest do
     assert {:ok, 3, captures} =
              Lossless.run(ctx.action_fn, ctx.goto_fn, ctx.productions, 0, @end_symbol, ctx.stream)
 
-    assert Record.take(captures) ==
-             {[{:a, 0, 1, []}],
-              [a: {:rule, :a, [x: {:token, :X, "x"}]}, x: [{:token, :X, "x"}, {:token, :X, "x"}]]}
+    {records, captures} = Record.take(captures)
+    assert records == [{:a, 0, 1, []}]
+
+    assert Ichor.Capture.plain(captures) ==
+             [a: {:rule, :a, [x: {:token, :X, "x"}]}, x: [{:token, :X, "x"}, {:token, :X, "x"}]]
   end
 
   test "records the grammar's rules and splices the helpers desugaring made up", ctx do

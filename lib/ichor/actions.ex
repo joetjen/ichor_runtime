@@ -28,6 +28,7 @@ defmodule Ichor.Actions do
   `ichor_runtime`, rather than alongside those two in `ichor` proper.
   """
 
+  alias Grammar.Source.Locator
   alias Ichor.{Capture, Error, Node}
   alias Ichor.Toolkit.Result
 
@@ -106,10 +107,39 @@ defmodule Ichor.Actions do
   missing key indistinguishable from "this rule shape never has an
   `:op`" (see that function's docs for why this can't just be inferred
   from the raw tree at dispatch time).
+
+  ## Options
+
+    * `:locator` -- the parse's `Grammar.Source.Locator`. With it, every
+      capture the parser recorded the place of (`Ichor.Capture.at/3`)
+      gets its `span`, a default `Ichor.Node` gets its own, and an
+      action's error with no position is placed (below). Without it,
+      every span is `nil` and errors are returned as the actions gave
+      them.
+    * `:range` -- the token range `{from, to}` the root rule matched;
+      the whole stream by default. A sequence of top-level matches
+      gives each one its own.
+
+  ## An action's error says where
+
+  An error a `handle_rule/3` or `handle_token/3` returns with no line
+  is placed where that rule or token matched, and shown with the line
+  it is on and a caret; nothing else about it changes. The action best
+  placed to say where is the one that refused, so an error that already
+  has a position -- placed by a nested rule's own action, or by the
+  action itself -- keeps it. `finalize/1`'s errors belong to no rule
+  and are left as they are.
   """
-  @spec evaluate(atom(), Capture.raw_captures(), module(), context(), capture_shapes()) ::
+  @spec evaluate(atom(), Capture.raw_captures(), module(), context(), capture_shapes(), keyword()) ::
           {:ok, term(), context()} | {:error, Error.t() | [Error.t()]}
-  def evaluate(root_rule, raw_captures, actions_module, initial_context, capture_shapes \\ %{}) do
+  def evaluate(
+        root_rule,
+        raw_captures,
+        actions_module,
+        initial_context,
+        capture_shapes \\ %{},
+        opts \\ []
+      ) do
     # `function_exported?/3` only answers correctly for a module that has
     # actually been loaded into this BEAM instance -- true for every
     # module reached through a normal call chain, but not guaranteed for
@@ -118,14 +148,25 @@ defmodule Ichor.Actions do
     # below.
     Code.ensure_loaded(actions_module)
 
-    with {:ok, value, context} <-
-           dispatch_rule(actions_module, root_rule, raw_captures, initial_context, capture_shapes) do
+    locator = Keyword.get(opts, :locator)
+    span = root_span(locator, Keyword.get(opts, :range))
+    kids = prepared_captures(raw_captures, locator)
+    run = %{actions: actions_module, shapes: capture_shapes, locator: locator}
+
+    with {:ok, value, context} <- run_rule(run, root_rule, kids, initial_context, span) do
       case run_finalize(actions_module, context) do
         :ok -> {:ok, value, context}
         {:error, _} = err -> err
       end
     end
   end
+
+  defp root_span(nil, _range), do: nil
+
+  defp root_span(%Locator{stream: stream} = locator, nil),
+    do: Locator.span(locator, 0, tuple_size(stream))
+
+  defp root_span(%Locator{} = locator, {from, to}), do: Locator.span(locator, from, to)
 
   defp run_finalize(actions_module, context) do
     if function_exported?(actions_module, :finalize, 1) do
@@ -140,54 +181,122 @@ defmodule Ichor.Actions do
   built directly by something like a macro's `unreify`) against
   `actions_module`, starting from `context`. See this module's own
   moduledoc for when you need this instead of an ordinary `.eval` thunk.
+
+  A node carries no positions, so every capture under it has a `nil`
+  span, and an error from it is returned as the action gave it.
   """
   @spec evaluate_node(Ichor.Capture.node_t(), module(), context()) ::
           {:ok, term(), context()} | {:error, Error.t()}
-  def evaluate_node({:token, name, text}, actions_module, context) do
-    with {:ok, value} <- dispatch_token(actions_module, name, text, context) do
-      {:ok, value, context}
+  def evaluate_node(node, actions_module, context) do
+    run = %{actions: actions_module, shapes: %{}, locator: nil}
+
+    case prepared(node, nil) do
+      {:placed, {:token, name, text}, span, nil} ->
+        with {:ok, value} <- run_token(run, name, text, context, span) do
+          {:ok, value, context}
+        end
+
+      {:placed, {:rule, name, _}, span, kids} ->
+        run_rule(run, name, kids, context, span)
+
+      {:placed, {:text, text}, _span, nil} ->
+        {:ok, text, context}
     end
   end
 
-  def evaluate_node({:rule, name, raw_captures}, actions_module, context) do
-    dispatch_rule(actions_module, name, raw_captures, context, %{})
+  # ---- recorded positions --------------------------------------------------
+
+  # The raw tree, ready to dispatch: every value as `{:placed, node,
+  # span, kids}` -- `node` the plain raw node an action sees (no
+  # `Ichor.Capture.at/3` wrapper left anywhere in it), `span` where it
+  # matched or nil, and `kids`, for a rule, its own captures prepared
+  # the same way. One pass over the tree, here: taking the wrappers off
+  # each capture's node as it is built would walk every subtree once per
+  # level above it.
+  defp prepared_captures(raw_captures, locator),
+    do: Enum.map(raw_captures, fn {name, value} -> {name, prepared(value, locator)} end)
+
+  defp prepared(values, locator) when is_list(values),
+    do: Enum.map(values, &prepared(&1, locator))
+
+  defp prepared({:"$at", node, from, to}, locator),
+    do: prepared_node(node, locator && Locator.span(locator, from, to), locator)
+
+  defp prepared(node, locator), do: prepared_node(node, nil, locator)
+
+  defp prepared_node({:rule, name, raw_captures}, span, locator) do
+    kids = prepared_captures(raw_captures, locator)
+    {:placed, {:rule, name, Enum.map(kids, fn {k, v} -> {k, plain(v)} end)}, span, kids}
   end
 
-  def evaluate_node({:text, text}, _actions_module, context) do
-    {:ok, text, context}
-  end
+  defp prepared_node(node, span, _locator), do: {:placed, node, span, nil}
+
+  defp plain(values) when is_list(values), do: Enum.map(values, &plain/1)
+  defp plain({:placed, node, _span, _kids}), do: node
+
+  # An action's error with no position, placed where its rule or token
+  # matched (`evaluate/6`'s "An action's error says where").
+  defp placed_result({:error, errors}, span, locator) when not is_nil(span),
+    do: {:error, placed_errors(errors, span, locator)}
+
+  defp placed_result(result, _span, _locator), do: result
+
+  defp placed_errors(errors, span, locator) when is_list(errors),
+    do: Enum.map(errors, &placed_errors(&1, span, locator))
+
+  defp placed_errors(%Error{line: nil} = error, {line, column, _length}, locator),
+    do: Grammar.Source.placed(%{error | line: line, column: column}, locator.input)
+
+  defp placed_errors(error, _span, _locator), do: error
 
   # ---- dispatch + default fallback ---------------------------------------
 
   @doc false
   def dispatch_rule(actions_module, rule_name, raw_captures, context, capture_shapes) do
-    normalized =
-      normalize_repeatables(raw_captures, Map.get(capture_shapes, rule_name, MapSet.new()))
-
-    captures = build_captures(actions_module, normalized, capture_shapes)
-
-    if function_exported?(actions_module, :handle_rule, 3) do
-      call_with_fallback(
-        fn -> actions_module.handle_rule(rule_name, captures, context) end,
-        {actions_module, :handle_rule, 3},
-        fn -> default_handle_rule(rule_name, captures, context) end
-      )
-    else
-      default_handle_rule(rule_name, captures, context)
-    end
+    run = %{actions: actions_module, shapes: capture_shapes, locator: nil}
+    run_rule(run, rule_name, prepared_captures(raw_captures, nil), context, nil)
   end
 
   @doc false
   def dispatch_token(actions_module, token_name, text, context) do
-    if function_exported?(actions_module, :handle_token, 3) do
-      call_with_fallback(
-        fn -> actions_module.handle_token(token_name, text, context) end,
-        {actions_module, :handle_token, 3},
-        fn -> {:ok, text} end
-      )
-    else
-      {:ok, text}
-    end
+    run = %{actions: actions_module, shapes: %{}, locator: nil}
+    run_token(run, token_name, text, context, nil)
+  end
+
+  defp run_rule(run, rule_name, kids, context, span) do
+    normalized = normalize_repeatables(kids, Map.get(run.shapes, rule_name, MapSet.new()))
+    captures = build_captures(run, normalized)
+    actions_module = run.actions
+
+    result =
+      if function_exported?(actions_module, :handle_rule, 3) do
+        call_with_fallback(
+          fn -> actions_module.handle_rule(rule_name, captures, context) end,
+          {actions_module, :handle_rule, 3},
+          fn -> default_handle_rule(rule_name, captures, context, span) end
+        )
+      else
+        default_handle_rule(rule_name, captures, context, span)
+      end
+
+    placed_result(result, span, run.locator)
+  end
+
+  defp run_token(run, token_name, text, context, span) do
+    actions_module = run.actions
+
+    result =
+      if function_exported?(actions_module, :handle_token, 3) do
+        call_with_fallback(
+          fn -> actions_module.handle_token(token_name, text, context) end,
+          {actions_module, :handle_token, 3},
+          fn -> {:ok, text} end
+        )
+      else
+        {:ok, text}
+      end
+
+    placed_result(result, span, run.locator)
   end
 
   # "A grammar's Actions module only implements the rules/tokens it needs
@@ -217,9 +326,9 @@ defmodule Ichor.Actions do
   # the end as `[]` (see `evaluate/5`'s own moduledoc for why this has
   # to happen at all: a repeatable capture that matched zero times must
   # still show up as `[]`, not a missing key).
-  defp normalize_repeatables(raw_captures, repeatable_names) do
+  defp normalize_repeatables(kids, repeatable_names) do
     {normalized, seen} =
-      Enum.map_reduce(raw_captures, MapSet.new(), fn {name, value}, seen ->
+      Enum.map_reduce(kids, MapSet.new(), fn {name, value}, seen ->
         if MapSet.member?(repeatable_names, name) do
           {{name, List.wrap(value)}, MapSet.put(seen, name)}
         else
@@ -235,62 +344,54 @@ defmodule Ichor.Actions do
   # value straight through, unwrapped -- e.g. calculator's
   # `factor := NUMBER | "(" expr ")"` never needs its own %Ichor.Node{},
   # its single capture's value already *is* factor's value.
-  defp default_handle_rule(rule_name, captures, context) when map_size(captures) == 1 do
+  defp default_handle_rule(rule_name, captures, context, span) when map_size(captures) == 1 do
     case Map.to_list(captures) do
       [{_name, %Capture{} = cap}] -> cap.eval.(context)
-      [{_name, list}] when is_list(list) -> build_node(rule_name, captures, context)
+      [{_name, list}] when is_list(list) -> build_node(rule_name, captures, context, span)
     end
   end
 
-  defp default_handle_rule(rule_name, captures, context),
-    do: build_node(rule_name, captures, context)
+  defp default_handle_rule(rule_name, captures, context, span),
+    do: build_node(rule_name, captures, context, span)
 
-  defp build_node(rule_name, captures, context) do
+  defp build_node(rule_name, captures, context, span) do
     with {:ok, resolved, context} <- eval_all(captures, context) do
-      {:ok, %Node{rule: rule_name, captures: resolved, span: nil}, context}
+      {:ok, %Node{rule: rule_name, captures: resolved, span: span}, context}
     end
   end
 
-  defp build_captures(actions_module, raw_captures, capture_shapes) do
-    raw_captures
+  defp build_captures(run, kids) do
+    kids
     |> Enum.with_index()
-    |> Map.new(fn {{name, raw}, position} ->
-      {name, build_capture(actions_module, raw, capture_shapes, position)}
-    end)
+    |> Map.new(fn {{name, value}, position} -> {name, build_capture(run, value, position)} end)
   end
 
-  defp build_capture(actions_module, raw, capture_shapes, position) when is_list(raw) do
-    Enum.map(raw, &build_capture(actions_module, &1, capture_shapes, position))
-  end
+  defp build_capture(run, values, position) when is_list(values),
+    do: Enum.map(values, &build_capture(run, &1, position))
 
-  defp build_capture(actions_module, {:token, name, text} = node, _capture_shapes, position) do
+  defp build_capture(run, {:placed, {:token, name, text} = node, span, nil}, position) do
     %Capture{
       node: node,
+      span: span,
       position: position,
       eval: fn ctx ->
-        with {:ok, value} <- dispatch_token(actions_module, name, text, ctx) do
+        with {:ok, value} <- run_token(run, name, text, ctx, span) do
           {:ok, value, ctx}
         end
       end
     }
   end
 
-  defp build_capture(
-         actions_module,
-         {:rule, name, raw_sub_captures} = node,
-         capture_shapes,
-         position
-       ) do
+  defp build_capture(run, {:placed, {:rule, name, _} = node, span, kids}, position) do
     %Capture{
       node: node,
+      span: span,
       position: position,
-      eval: fn ctx ->
-        dispatch_rule(actions_module, name, raw_sub_captures, ctx, capture_shapes)
-      end
+      eval: fn ctx -> run_rule(run, name, kids, ctx, span) end
     }
   end
 
-  defp build_capture(_actions_module, {:text, text} = node, _capture_shapes, position) do
-    %Capture{node: node, position: position, eval: fn ctx -> {:ok, text, ctx} end}
+  defp build_capture(_run, {:placed, {:text, text} = node, span, nil}, position) do
+    %Capture{node: node, span: span, position: position, eval: fn ctx -> {:ok, text, ctx} end}
   end
 end
