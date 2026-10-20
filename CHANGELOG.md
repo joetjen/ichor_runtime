@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Grammar.Furthest`**: where a PEG parse went wrong -- the furthest
+  token any alternative reached and every token wanted there, recorded
+  while matching (per process, saved and restored around a parse, not
+  inside a lookahead) and turned into the error a failed parse reports.
+  `Grammar.Native.Runtime.Parser.match_token/3` records its failures,
+  and `and_pred/5` and `not_pred/5` bracket their lookahead.
+
 ### Changed
 
 - **The README warns, at the top, that this library is under heavy

@@ -188,15 +188,21 @@ defmodule Grammar.Native.Runtime.Parser do
           {:ok, non_neg_integer(), String.t(), term()} | :fail
   def match_token(stream, pos, name) do
     case token_at(stream, pos) do
-      %Token{name: ^name, text: text, capture: capture} -> {:ok, pos + 1, text, capture}
-      _ -> :fail
+      %Token{name: ^name, text: text, capture: capture} ->
+        {:ok, pos + 1, text, capture}
+
+      # Where the parse went wrong, should this be as far as it gets
+      # (`Grammar.Furthest`).
+      _ ->
+        Grammar.Furthest.failed(pos, name)
+        :fail
     end
   end
 
   @doc "Positive lookahead: consumes nothing either way."
   @spec and_pred(rule_fun(), tuple(), non_neg_integer(), [integer()], term()) :: rule_result()
   def and_pred(fun, stream, pos, ref_stack, context) do
-    case fun.(stream, pos, ref_stack, context) do
+    case predicate(fun, stream, pos, ref_stack, context) do
       {:ok, _, _, _} -> {:ok, pos, ref_stack, []}
       :fail -> :fail
     end
@@ -205,10 +211,19 @@ defmodule Grammar.Native.Runtime.Parser do
   @doc "Negative lookahead: consumes nothing either way."
   @spec not_pred(rule_fun(), tuple(), non_neg_integer(), [integer()], term()) :: rule_result()
   def not_pred(fun, stream, pos, ref_stack, context) do
-    case fun.(stream, pos, ref_stack, context) do
+    case predicate(fun, stream, pos, ref_stack, context) do
       {:ok, _, _, _} -> :fail
       :fail -> {:ok, pos, ref_stack, []}
     end
+  end
+
+  # A lookahead's own match, whose failures are no expectation of the
+  # parse's (`Grammar.Furthest`).
+  defp predicate(fun, stream, pos, ref_stack, context) do
+    Grammar.Furthest.enter_predicate()
+    result = fun.(stream, pos, ref_stack, context)
+    Grammar.Furthest.exit_predicate()
+    result
   end
 
   # ---- @indent / @samecol -----------------------------------------------
