@@ -1,5 +1,11 @@
 # IchorRuntime
 
+> [!WARNING]
+> **Under heavy development: not for production use before `1.0.0`.**
+> Things can and will break, and the specification can and will change,
+> between any two releases until `1.0.0`. Do not use this library in a
+> production system yet.
+
 [![Hex.pm](https://img.shields.io/hexpm/v/ichor_runtime.svg)](https://hex.pm/packages/ichor_runtime)
 [![Documentation](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/ichor_runtime)
 [![Docs (main)](https://img.shields.io/badge/docs-main-blueviolet.svg)](https://joetjen.github.io/ichor_runtime/)
