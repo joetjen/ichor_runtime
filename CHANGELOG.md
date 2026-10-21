@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-21
+
 ### Added
 
 - **`Grammar.Furthest`**: where a PEG parse went wrong -- the furthest
@@ -190,6 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     logic-language evaluation models), `Ichor.Toolkit.Result`
     (`reduce_ok`/`map_ok`).
 
+[0.6.0]: https://github.com/joetjen/ichor_runtime/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/joetjen/ichor_runtime/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/joetjen/ichor_runtime/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/joetjen/ichor_runtime/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/joetjen/ichor_runtime/compare/v0.1.0...v0.2.0
