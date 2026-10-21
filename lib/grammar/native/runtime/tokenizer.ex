@@ -10,11 +10,83 @@ defmodule Grammar.Native.Runtime.Tokenizer do
 
   alias Grammar.VM.Token
 
+  import Bitwise
+
   @type char_result :: {:ok, String.t(), String.t()} | :fail
   @type char_fun :: (String.t() -> char_result())
 
+  @typedoc """
+  A character class prepared by `char_class/1`: its ASCII members as a
+  128-bit bitmap, and the rest as sorted, disjoint `{lo, hi}` ranges in
+  a tuple.
+  """
+  @type class :: {non_neg_integer(), tuple()}
+
+  @doc """
+  Whether `cp` lies in any of `ranges`, scanning them in turn.
+
+  For a parser generated before `char_class/1` existed. A class with
+  hundreds of ranges, such as a Unicode identifier class, makes every
+  character outside it scan them all: a generated parser now prepares
+  the class once with `char_class/1` and asks `in_class?/2`.
+  """
   @spec in_ranges?(non_neg_integer(), [{non_neg_integer(), non_neg_integer()}]) :: boolean()
-  def in_ranges?(cp, ranges), do: Enum.any?(ranges, fn {lo, hi} -> cp >= lo and cp <= hi end)
+  def in_ranges?(_cp, []), do: false
+  def in_ranges?(cp, [{lo, hi} | _]) when cp >= lo and cp <= hi, do: true
+  def in_ranges?(cp, [_ | rest]), do: in_ranges?(cp, rest)
+
+  @doc """
+  `ranges`, in any order, overlapping or not, prepared for `in_class?/2`:
+  an ASCII character is one bit test, and any other a binary search.
+
+      iex> class = Grammar.Native.Runtime.Tokenizer.char_class([{?a, ?z}, {0x4E00, 0x9FFF}])
+      iex> {Grammar.Native.Runtime.Tokenizer.in_class?(?q, class),
+      ...>  Grammar.Native.Runtime.Tokenizer.in_class?(0x4E2D, class),
+      ...>  Grammar.Native.Runtime.Tokenizer.in_class?(?Q, class)}
+      {true, true, false}
+
+  """
+  @spec char_class([{non_neg_integer(), non_neg_integer()}]) :: class()
+  def char_class(ranges) do
+    ascii =
+      for {lo, hi} <- ranges, lo <= 127, cp <- lo..min(hi, 127)//1, reduce: 0 do
+        bits -> bor(bits, bsl(1, cp))
+      end
+
+    rest =
+      for({lo, hi} <- ranges, hi >= 128, do: {max(lo, 128), hi})
+      |> Enum.sort()
+      |> merged()
+      |> List.to_tuple()
+
+    {ascii, rest}
+  end
+
+  @doc "Whether `cp` is in `class`, a class prepared by `char_class/1`."
+  @spec in_class?(non_neg_integer(), class()) :: boolean()
+  def in_class?(cp, {ascii, _rest}) when cp < 128, do: band(bsr(ascii, cp), 1) == 1
+  def in_class?(cp, {_ascii, rest}), do: searched?(cp, rest, 0, tuple_size(rest) - 1)
+
+  # Binary search over sorted, disjoint ranges, between indices low and high.
+  defp searched?(_cp, _ranges, low, high) when low > high, do: false
+
+  defp searched?(cp, ranges, low, high) do
+    middle = div(low + high, 2)
+    {lo, hi} = elem(ranges, middle)
+
+    cond do
+      cp < lo -> searched?(cp, ranges, low, middle - 1)
+      cp > hi -> searched?(cp, ranges, middle + 1, high)
+      true -> true
+    end
+  end
+
+  # Sorted ranges with every overlapping or adjacent pair joined into one.
+  defp merged([{lo1, hi1}, {lo2, hi2} | rest]) when lo2 <= hi1 + 1,
+    do: merged([{lo1, max(hi1, hi2)} | rest])
+
+  defp merged([range | rest]), do: [range | merged(rest)]
+  defp merged([]), do: []
 
   @doc "Ordered choice: tries each of `funs` against `input` in order, short-circuiting on the first success (never evaluating later alternatives, same as PEG's own ordered choice)."
   @spec first_char_match([char_fun()], String.t()) :: char_result()
@@ -123,26 +195,25 @@ defmodule Grammar.Native.Runtime.Tokenizer do
   """
   @spec pick_longest([{atom(), (-> {:ok, String.t(), String.t(), term()} | :fail)}]) ::
           {:ok, atom(), String.t(), String.t(), term()} | :fail
-  def pick_longest(candidates) do
-    Enum.reduce(candidates, nil, fn {name, fun}, best ->
-      case fun.() do
-        :fail ->
-          best
+  def pick_longest(candidates), do: longest(candidates, nil)
 
-        {:ok, text, rest, capture} ->
-          len = byte_size(text)
+  # pick_longest/1's loop, with the best match so far as
+  # {name, text, rest, capture, length}: plain recursion, as it runs for
+  # every candidate at every position of the input.
+  defp longest([], nil), do: :fail
+  defp longest([], {name, text, rest, capture, _len}), do: {:ok, name, text, rest, capture}
 
-          cond do
-            len == 0 -> best
-            best == nil -> {name, text, rest, capture, len}
-            elem(best, 4) >= len -> best
-            true -> {name, text, rest, capture, len}
-          end
-      end
-    end)
-    |> case do
-      nil -> :fail
-      {name, text, rest, capture, _len} -> {:ok, name, text, rest, capture}
+  defp longest([{name, fun} | more], best) do
+    case fun.() do
+      {:ok, text, rest, capture} when byte_size(text) > 0 ->
+        len = byte_size(text)
+
+        if best == nil or len > elem(best, 4),
+          do: longest(more, {name, text, rest, capture, len}),
+          else: longest(more, best)
+
+      _no_or_empty_match ->
+        longest(more, best)
     end
   end
 
@@ -199,10 +270,13 @@ defmodule Grammar.Native.Runtime.Tokenizer do
 
   @spec advance_line_col(String.t(), pos_integer(), pos_integer()) ::
           {pos_integer(), pos_integer()}
-  def advance_line_col(text, line, col) do
-    Enum.reduce(String.to_charlist(text), {line, col}, fn
-      ?\n, {line, _col} -> {line + 1, 1}
-      _, {line, col} -> {line, col + 1}
-    end)
-  end
+  def advance_line_col(<<?\n, rest::binary>>, line, _col), do: advance_line_col(rest, line + 1, 1)
+
+  def advance_line_col(<<_::utf8, rest::binary>>, line, col),
+    do: advance_line_col(rest, line, col + 1)
+
+  def advance_line_col(<<_byte, rest::binary>>, line, col),
+    do: advance_line_col(rest, line, col + 1)
+
+  def advance_line_col(<<>>, line, col), do: {line, col}
 end
