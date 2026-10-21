@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.6.0] - 2026-10-21
+
+### Added
+
+- **`Grammar.Furthest`**: where a PEG parse went wrong -- the furthest
+  token any alternative reached and every token wanted there, recorded
+  while matching (per process, saved and restored around a parse, not
+  inside a lookahead) and turned into the error a failed parse reports.
+  `Grammar.Native.Runtime.Parser.match_token/3` records its failures,
+  and `and_pred/5` and `not_pred/5` bracket their lookahead.
+
+### Changed
+
+- **The README warns, at the top, that this library is under heavy
+  development** and not for production use before `1.0.0`: things can
+  and will break, and the specification can and will change, between
+  any two releases until then.
+- **The warning reaches hex.pm and HexDocs too**: the package
+  description starts with it, so search results show it, and HexDocs
+  shows the README's warning as a warning box -- GitHub's `> [!WARNING]`
+  alert, which ExDoc does not render, is rewritten into ExDoc's own
+  admonition when the docs are built (the `docs` alias; the README is
+  unchanged).
+
 ## [0.5.0] - 2026-10-20
 
 ### Added
@@ -166,6 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     logic-language evaluation models), `Ichor.Toolkit.Result`
     (`reduce_ok`/`map_ok`).
 
+[0.6.0]: https://github.com/joetjen/ichor_runtime/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/joetjen/ichor_runtime/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/joetjen/ichor_runtime/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/joetjen/ichor_runtime/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/joetjen/ichor_runtime/compare/v0.1.0...v0.2.0
