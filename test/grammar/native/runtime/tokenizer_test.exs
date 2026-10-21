@@ -1,5 +1,8 @@
 defmodule Grammar.Native.Runtime.TokenizerTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
+
+  doctest Grammar.Native.Runtime.Tokenizer
 
   alias Grammar.Native.Runtime.Tokenizer
   alias Grammar.VM.Token
@@ -22,6 +25,63 @@ defmodule Grammar.Native.Runtime.TokenizerTest do
 
     test "false when it falls in none" do
       refute Tokenizer.in_ranges?(?A, [{?0, ?9}, {?a, ?z}])
+    end
+
+    test "false for no ranges at all" do
+      refute Tokenizer.in_ranges?(?a, [])
+    end
+  end
+
+  describe "char_class/1 and in_class?/2" do
+    test "a codepoint in a range is in the class, at either end too" do
+      class = Tokenizer.char_class([{?0, ?9}, {?a, ?z}])
+
+      assert Tokenizer.in_class?(?0, class)
+      assert Tokenizer.in_class?(?9, class)
+      assert Tokenizer.in_class?(?m, class)
+      refute Tokenizer.in_class?(?A, class)
+      refute Tokenizer.in_class?(?/, class)
+    end
+
+    test "ranges in any order, overlapping or adjacent, mean their union" do
+      class = Tokenizer.char_class([{0x4E00, 0x9FFF}, {?a, ?f}, {?c, ?k}, {0x3400, 0x4DFF}])
+
+      assert Tokenizer.in_class?(?k, class)
+      assert Tokenizer.in_class?(0x4E00, class)
+      assert Tokenizer.in_class?(0x4DFF, class)
+      refute Tokenizer.in_class?(?l, class)
+      refute Tokenizer.in_class?(0x33FF, class)
+      refute Tokenizer.in_class?(0xA000, class)
+    end
+
+    test "a range across the ASCII boundary covers both sides of it" do
+      class = Tokenizer.char_class([{120, 300}])
+
+      assert Tokenizer.in_class?(127, class)
+      assert Tokenizer.in_class?(128, class)
+      assert Tokenizer.in_class?(300, class)
+      refute Tokenizer.in_class?(119, class)
+      refute Tokenizer.in_class?(301, class)
+    end
+
+    test "an empty class holds nothing" do
+      class = Tokenizer.char_class([])
+
+      refute Tokenizer.in_class?(?a, class)
+      refute Tokenizer.in_class?(0x10FFFF, class)
+    end
+
+    property "agrees with in_ranges?/2 on every codepoint and every range list" do
+      range = gen(all(lo <- integer(0..0x10FFFF), len <- integer(0..300)), do: {lo, lo + len})
+      near = one_of([integer(0..200), integer(0..0x10FFFF)])
+
+      check all(ranges <- list_of(range, max_length: 40), cps <- list_of(near, length: 20)) do
+        class = Tokenizer.char_class(ranges)
+
+        for cp <- cps do
+          assert Tokenizer.in_class?(cp, class) == Tokenizer.in_ranges?(cp, ranges)
+        end
+      end
     end
   end
 
