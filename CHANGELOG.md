@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Grammar.Source.significant/2`**: a token stream without its skip
+  tokens, which an LR or GLR parse now runs on; and
+  **`Ichor.Syntax.Record.unskipped/3`**, which moves a record counted
+  in that stream back to the count `Ichor.Syntax.tree/3` expects, so
+  the lossless tree still holds every byte.
+
 ### Fixed
 
 - **The install lines in the README and guides name the current

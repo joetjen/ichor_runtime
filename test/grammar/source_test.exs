@@ -48,6 +48,25 @@ defmodule Grammar.SourceTest do
     end
   end
 
+  describe "significant/2" do
+    test "drops every skip token, between two others too" do
+      tokens = [
+        token(:SPACE, " ", 1, 1),
+        token(:NUMBER, "1", 1, 2),
+        token(:SPACE, " ", 1, 3),
+        token(:NUMBER, "2", 1, 4),
+        token(:SPACE, "\n", 1, 5)
+      ]
+
+      assert Source.significant(tokens, :SPACE) == [Enum.at(tokens, 1), Enum.at(tokens, 3)]
+    end
+
+    test "changes nothing for a grammar with no skip token" do
+      tokens = [token(:SPACE, " ", 1, 1)]
+      assert Source.significant(tokens, nil) == tokens
+    end
+  end
+
   describe "position/3" do
     test "is where the token at pos starts" do
       stream = {token(:NUMBER, "1", 1, 1), token(:PLUS, "+", 2, 3)}
