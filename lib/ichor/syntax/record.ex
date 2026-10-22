@@ -99,5 +99,40 @@ defmodule Ichor.Syntax.Record do
           {Capture.raw_captures(), Syntax.record()}
   def root(rule, to, captures), do: called(rule, 0, to, captures)
 
+  @doc """
+  `record`, its positions counted in `tokens` without their `skip`
+  tokens (`Grammar.Source.significant/2`, what an LR or GLR parse runs
+  on), counted instead in the trimmed stream `Ichor.Syntax.tree/3`
+  expects: a range takes in the skip tokens between its own, and an
+  empty record sits just before the next significant token.
+
+      iex> tokens = for {name, text} <- [N: "1", WS: " ", N: "2"],
+      ...>   do: %Grammar.VM.Token{name: name, text: text, line: 1, column: 1}
+      iex> Ichor.Syntax.Record.unskipped({:pair, 0, 2, [{:n, 1, 2, []}]}, tokens, :WS)
+      {:pair, 0, 3, [{:n, 2, 3, []}]}
+
+  """
+  @spec unskipped(Syntax.record(), [Grammar.VM.Token.t()], atom() | nil) :: Syntax.record()
+  def unskipped(record, _tokens, nil), do: record
+
+  def unskipped(record, tokens, skip) do
+    trimmed = Grammar.Source.trimmed(tokens, skip)
+
+    at =
+      for {token, i} <- Enum.with_index(trimmed), token.name != skip do
+        i
+      end
+
+    moved(record, List.to_tuple(at), length(trimmed))
+  end
+
+  # A record moved by `at`, the trimmed position of each significant
+  # token; `size` is where the trimmed stream ends.
+  defp moved({rule, from, to, children}, at, size) do
+    from2 = if from < tuple_size(at), do: elem(at, from), else: size
+    to2 = if to > from, do: elem(at, to - 1) + 1, else: from2
+    {rule, from2, to2, Enum.map(children, &moved(&1, at, size))}
+  end
+
   defp helper?(name), do: String.starts_with?(Atom.to_string(name), "$")
 end

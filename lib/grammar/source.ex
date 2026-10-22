@@ -54,6 +54,17 @@ defmodule Grammar.Source do
   end
 
   @doc """
+  `tokens` without any `skip` token: the stream an LR or GLR parse runs
+  on. Their rules never mention the skip token -- `@skip` makes it
+  optional between any two elements, which a table with one token of
+  lookahead cannot decide -- so it is dropped before parsing instead.
+  `nil`, for `@noskip`, changes nothing.
+  """
+  @spec significant([Grammar.VM.Token.t()], atom() | nil) :: [Grammar.VM.Token.t()]
+  def significant(tokens, nil), do: tokens
+  def significant(tokens, skip), do: Enum.reject(tokens, &(&1.name == skip))
+
+  @doc """
   Where position `pos` of `stream` is, as `{line, column}`: where its
   token starts, or, past the last token, the end of `input`.
 
