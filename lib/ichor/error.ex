@@ -4,6 +4,10 @@ defmodule Ichor.Error do
   pass, and `Ichor.Actions` -- so errors look the same regardless of
   origin.
 
+  It is an exception, though Ichor returns it rather than raising it: a
+  caller can `raise` an error it was handed, and `Exception.message/1`
+  gives the same text as `format/1`.
+
   `context_lines` is pre-rendered at construction time, not lazily
   computed on access: cheap to do once, and keeps every stage's error
   output visually consistent.
@@ -17,6 +21,7 @@ defmodule Ichor.Error do
   @type stage :: :lexer | :parser | :analysis | :action
 
   @type t :: %__MODULE__{
+          __exception__: true,
           message: String.t(),
           line: pos_integer() | nil,
           column: pos_integer() | nil,
@@ -28,7 +33,15 @@ defmodule Ichor.Error do
           data: term()
         }
 
-  defstruct [:message, :line, :column, :file, :context_lines, :expected, :found, :stage, :data]
+  defexception [:message, :line, :column, :file, :context_lines, :expected, :found, :stage, :data]
+
+  @doc """
+  The error as `format/1` writes it, with where it is and the line it
+  points at: what `Exception.message/1` gives, and what `raise` shows.
+  """
+  @impl true
+  @spec message(t()) :: String.t()
+  def message(%__MODULE__{} = error), do: format(error)
 
   @doc """
   Builds a `Ichor.Error`, pre-rendering `context_lines` immediately.

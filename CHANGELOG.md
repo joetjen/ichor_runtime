@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Ichor.Error` is an exception**: `Exception.message/1` raised on
+  it, and an error handed back by a parser could not be raised as it
+  was. It is now a `defexception` whose message is `format/1`'s text,
+  with where the error is and the line it points at. It is the same
+  struct with the same fields, so matching on it is unchanged.
 - **The install lines in the README and guides name the current
   versions** (`ichor_runtime ~> 0.6.1`, `ichor ~> 0.7`); they still said
   `~> 0.5` and `~> 0.6`.
