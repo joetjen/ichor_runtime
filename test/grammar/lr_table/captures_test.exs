@@ -107,6 +107,22 @@ defmodule Grammar.LRTable.CapturesTest do
       assert build(production, entries, stream) == [span: {:text, "foobar"}]
     end
 
+    test "the skip text dropped between its tokens is put back, but not before the first" do
+      production = %Production{
+        id: 0,
+        lhs: :r,
+        rhs: [{:nonterminal, :whatever}],
+        captures: [{0, :span, :text}]
+      }
+
+      stream =
+        {%{tok(:A, "a") | trivia_before: " "}, %{tok(:EQ, "=") | trivia_before: "  "},
+         %{tok(:B, "b") | trivia_before: "\n "}}
+
+      entries = [{:ignored, 0, 3}]
+      assert build(production, entries, stream) == [span: {:text, "a  =\n b"}]
+    end
+
     test "an empty span concatenates to an empty string" do
       production = %Production{
         id: 0,

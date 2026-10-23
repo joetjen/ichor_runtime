@@ -59,10 +59,23 @@ defmodule Grammar.Source do
   optional between any two elements, which a table with one token of
   lookahead cannot decide -- so it is dropped before parsing instead.
   `nil`, for `@noskip`, changes nothing.
+
+  The text of the skip tokens dropped before a token is kept on it
+  (`trivia_before`), so a capture over several tokens still holds the
+  input between its first and last, skip tokens included.
   """
   @spec significant([Grammar.VM.Token.t()], atom() | nil) :: [Grammar.VM.Token.t()]
   def significant(tokens, nil), do: tokens
-  def significant(tokens, skip), do: Enum.reject(tokens, &(&1.name == skip))
+
+  def significant(tokens, skip) do
+    {kept, _trivia} =
+      Enum.reduce(tokens, {[], ""}, fn
+        %{name: ^skip, text: text}, {kept, trivia} -> {kept, trivia <> text}
+        token, {kept, trivia} -> {[%{token | trivia_before: trivia} | kept], ""}
+      end)
+
+    Enum.reverse(kept)
+  end
 
   @doc """
   Where position `pos` of `stream` is, as `{line, column}`: where its
