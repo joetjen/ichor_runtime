@@ -11,6 +11,11 @@ defmodule Grammar.VM.Token do
   structure here instead -- a string-interpolation token's embedded
   expressions, say -- which the rule level uses verbatim in place of the
   usual flat-text capture.
+
+  `trivia_before` is the text of the skip tokens dropped just before this
+  one from an LR or GLR stream (`Grammar.Source.significant/2`), so a
+  capture over several tokens can still give the input between them; it
+  is `""` everywhere else.
   """
 
   @type t :: %__MODULE__{
@@ -18,8 +23,9 @@ defmodule Grammar.VM.Token do
           text: String.t(),
           line: pos_integer(),
           column: pos_integer(),
-          capture: Ichor.Capture.node_t() | nil
+          capture: Ichor.Capture.node_t() | nil,
+          trivia_before: String.t()
         }
 
-  defstruct [:name, :text, :line, :column, capture: nil]
+  defstruct [:name, :text, :line, :column, capture: nil, trivia_before: ""]
 end

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Under `@engine lr` and `glr`, a capture over several tokens keeps
+  the whitespace inside it again.** Since 0.6.2 the skip tokens are
+  dropped from the LR/GLR stream, and a capture's text was joined from
+  the tokens left, so `all:(key:WORD "=" WORD)` on `a = b` gave `"a=b"`
+  where PEG gives `"a = b"`. `Grammar.Source.significant/2` now keeps the
+  text of the skip tokens it drops on the next token
+  (`Grammar.VM.Token`'s new `trivia_before`, `""` everywhere else), and
+  the text of a capture puts it back between its tokens.
+
 ## [0.6.2] - 2026-10-23
 
 ### Added

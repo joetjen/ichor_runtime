@@ -58,12 +58,25 @@ defmodule Grammar.SourceTest do
         token(:SPACE, "\n", 1, 5)
       ]
 
-      assert Source.significant(tokens, :SPACE) == [Enum.at(tokens, 1), Enum.at(tokens, 3)]
+      assert Enum.map(Source.significant(tokens, :SPACE), &{&1.name, &1.text}) ==
+               [{:NUMBER, "1"}, {:NUMBER, "2"}]
     end
 
     test "changes nothing for a grammar with no skip token" do
       tokens = [token(:SPACE, " ", 1, 1)]
       assert Source.significant(tokens, nil) == tokens
+    end
+
+    test "keeps the skip text it drops on the next token, for a capture's text" do
+      tokens = [
+        token(:NUMBER, "1", 1, 1),
+        token(:SPACE, " ", 1, 2),
+        token(:SPACE, "\n", 1, 3),
+        token(:NUMBER, "2", 2, 1)
+      ]
+
+      assert [%{trivia_before: ""}, %{text: "2", trivia_before: " \n"}] =
+               Source.significant(tokens, :SPACE)
     end
   end
 
