@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-23
+
+### Added
+
+- **`Grammar.Source.significant/2`**: a token stream without its skip
+  tokens, which an LR or GLR parse now runs on; and
+  **`Ichor.Syntax.Record.unskipped/3`**, which moves a record counted
+  in that stream back to the count `Ichor.Syntax.tree/3` expects, so
+  the lossless tree still holds every byte.
+
+### Fixed
+
+- **`Ichor.Error` is an exception**: `Exception.message/1` raised on
+  it, and an error handed back by a parser could not be raised as it
+  was. It is now a `defexception` whose message is `format/1`'s text,
+  with where the error is and the line it points at. It is the same
+  struct with the same fields, so matching on it is unchanged.
+- **The install lines in the README and guides name the current
+  versions** (`ichor_runtime ~> 0.6.1`, `ichor ~> 0.7`); they still said
+  `~> 0.5` and `~> 0.6`.
+
 ## [0.6.1] - 2026-10-21
 
 ### Added
@@ -213,6 +234,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     logic-language evaluation models), `Ichor.Toolkit.Result`
     (`reduce_ok`/`map_ok`).
 
+[0.6.2]: https://github.com/joetjen/ichor_runtime/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/joetjen/ichor_runtime/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/joetjen/ichor_runtime/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/joetjen/ichor_runtime/compare/v0.4.0...v0.5.0

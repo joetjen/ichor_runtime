@@ -86,7 +86,35 @@ defmodule Ichor.ErrorTest do
   end
 
   test "the struct itself only has the nine documented fields" do
-    assert Map.keys(%Error{}) |> Enum.reject(&(&1 == :__struct__)) |> Enum.sort() ==
+    assert Map.keys(%Error{})
+           |> Enum.reject(&(&1 in [:__struct__, :__exception__]))
+           |> Enum.sort() ==
              [:column, :context_lines, :data, :expected, :file, :found, :line, :message, :stage]
+  end
+
+  describe "as an exception" do
+    test "Exception.message/1 gives the formatted error, with where and context" do
+      error =
+        Ichor.Error.new(
+          message: "expected ')'",
+          file: "calc.aether",
+          line: 1,
+          column: 8,
+          source: "(2 + 3"
+        )
+
+      assert Exception.message(error) == Ichor.Error.format(error)
+    end
+
+    test "it can be raised as it is, and rescued by its own name" do
+      error = Ichor.Error.new(message: "boom", stage: :parser)
+
+      assert_raise Ichor.Error, "boom", fn -> raise error end
+    end
+
+    test "it is still the same struct, matched by its fields" do
+      assert %Ichor.Error{message: "boom", stage: :lexer} =
+               Ichor.Error.new(message: "boom", stage: :lexer)
+    end
   end
 end

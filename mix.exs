@@ -1,7 +1,7 @@
 defmodule IchorRuntime.MixProject do
   use Mix.Project
 
-  @version "0.6.1"
+  @version "0.6.2"
 
   # `mix precommit` includes `test` as a step; without this, Mix runs
   # the whole alias chain (including `mix test`) in :dev, and `mix test`
