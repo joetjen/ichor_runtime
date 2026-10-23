@@ -86,8 +86,14 @@ defmodule Grammar.LRTable.Captures do
   defp as_list(value) when is_list(value), do: value
   defp as_list(value), do: [value]
 
+  # The input a span covers: its tokens' text, and between them the skip
+  # text an LR or GLR stream keeps on each token (`trivia_before`, see
+  # `Grammar.Source.significant/2`) -- but not before the first one.
   defp concat_text(stream, start_pos, end_pos) do
-    Enum.map_join(start_pos..(end_pos - 1)//1, "", fn i -> elem(stream, i).text end)
+    Enum.map_join(start_pos..(end_pos - 1)//1, "", fn
+      ^start_pos -> elem(stream, start_pos).text
+      i -> elem(stream, i).trivia_before <> elem(stream, i).text
+    end)
   end
 
   @doc """
