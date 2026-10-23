@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-23
+
 ### Fixed
 
 - **Under `@engine lr` and `glr`, a capture over several tokens keeps
@@ -245,6 +247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     logic-language evaluation models), `Ichor.Toolkit.Result`
     (`reduce_ok`/`map_ok`).
 
+[0.6.3]: https://github.com/joetjen/ichor_runtime/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/joetjen/ichor_runtime/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/joetjen/ichor_runtime/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/joetjen/ichor_runtime/compare/v0.5.0...v0.6.0
